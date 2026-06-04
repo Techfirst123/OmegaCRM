@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="surface-panel">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div class="section-heading mb-0">
+            <h3 class="section-title">Vendor List</h3>
+            <p class="section-copy">Live records from the `vendor_registration` table.</p>
+        </div>
+        <a class="btn btn-primary" href="{% url 'vendor-registration' %}">New Vendor</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table vendor-table align-middle">
+            <thead>
+                <tr>
+                    <th>Vendor ID</th>
+                    <th>Company</th>
+                    <th>Type</th>
+                    <th>Category</th>
+                    <th>Contact Person</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vendor in vendors %}
+                <tr>
+                    <td class="fw-semibold">{{ vendor.vendor_id }}</td>
+                    <td>
+                        <div class="fw-semibold">{{ vendor.company_name }}</div>
+                        <div class="small text-muted">{{ vendor.city|default:"-" }}, {{ vendor.state|default:"-" }}</div>
+                    </td>
+                    <td>{{ vendor.vendor_type|default:"-" }}</td>
+                    <td>{{ vendor.vendor_category|default:"-" }}</td>
+                    <td>{{ vendor.contact_person|default:"-" }}</td>
+                    <td>{{ vendor.email_id|default:"-" }}</td>
+                    <td><span class="status-pill {{ vendor.qualification_status|default:'unknown' }}">{{ vendor.qualification_status|default:"pending" }}</span></td>
+                    <td>{{ vendor.created_at|date:"d M Y, h:i A" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-5 text-muted">No vendors available yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

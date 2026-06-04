@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="hero-kicker">Vendor Analytics</p>
+        <h2 class="hero-title">Dashboard is now focused on vendor graph data only.</h2>
+        <p class="hero-copy">Use this screen to watch status mix and category distribution while registration and listing stay inside the vendor module.</p>
+    </div>
+    <div class="hero-metrics">
+        <div class="metric-chip">
+            <span>Total Vendors</span>
+            <strong>{{ vendor_count }}</strong>
+        </div>
+        <div class="metric-chip">
+            <span>Qualified</span>
+            <strong>{{ qualified_count }}</strong>
+        </div>
+        <div class="metric-chip">
+            <span>Disqualified</span>
+            <strong>{{ disqualified_count }}</strong>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4 mt-1">
+    <div class="col-lg-6">
+        <div class="surface-panel chart-panel">
+            <div class="section-heading">
+                <h3 class="section-title">Vendor Status</h3>
+                <p class="section-copy">Qualified, disqualified, and other registrations.</p>
+            </div>
+            {{ status_chart_data|json_script:"status-chart-data" }}
+            <canvas id="statusChart" class="dashboard-chart" aria-label="Vendor status chart"></canvas>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="surface-panel chart-panel">
+            <div class="section-heading">
+                <h3 class="section-title">Vendor Category</h3>
+                <p class="section-copy">Service-provider versus sub-contractor split.</p>
+            </div>
+            {{ category_chart_data|json_script:"category-chart-data" }}
+            <canvas id="categoryChart" class="dashboard-chart" aria-label="Vendor category chart"></canvas>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+    const statusData = JSON.parse(document.getElementById('status-chart-data').textContent);
+    const categoryData = JSON.parse(document.getElementById('category-chart-data').textContent);
+
+    new Chart(document.getElementById('statusChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Qualified', 'Disqualified', 'Other'],
+            datasets: [{
+                data: statusData,
+                backgroundColor: ['#2f7d4a', '#c96f2d', '#a9b3ae'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    new Chart(document.getElementById('categoryChart'), {
+        type: 'bar',
+        data: {
+            labels: ['Service Provider', 'Sub-contractor'],
+            datasets: [{
+                label: 'Vendors',
+                data: categoryData,
+                backgroundColor: ['#16302b', '#c96f2d'],
+                borderRadius: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0 }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+</script>
+{% endblock %}

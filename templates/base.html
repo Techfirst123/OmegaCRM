@@ -1,0 +1,62 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title|default:"OmegaERP" }} - OmegaERP</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link href="{% static 'css/custom.css' %}?v={% now "U" %}" rel="stylesheet">
+</head>
+<body class="app-shell">
+    <div class="app-layout">
+        <aside class="sidebar-panel">
+            <div>
+                <a class="brand-logo-link" href="{% url 'index' %}" aria-label="OmegaERP home">
+                    <img class="brand-logo-image" src="{% static 'branding/omega-logo.png' %}" alt="OmegaERP logo">
+                </a>
+                <div class="brand-subtitle mt-2">Operations workspace</div>
+            </div>
+            <nav class="nav flex-column mt-4 gap-2">
+                <a class="nav-link app-nav-link {% if request.path == '/' %}active{% endif %}" href="{% url 'index' %}">Dashboard</a>
+                <a class="nav-link app-nav-link {% if '/projects/' in request.path %}active{% endif %}" href="{% url 'project-module' %}">Project Module</a>
+                <a class="nav-link app-nav-link {% if '/vendors/' in request.path %}active{% endif %}" href="{% url 'vendor-module' %}">Vendor Module</a>
+                <a class="nav-link app-nav-link {% if '/materials/' in request.path %}active{% endif %}" href="{% url 'material-module' %}">Material Master</a>
+            </nav>
+        </aside>
+        <main class="content-panel">
+            <header class="page-header">
+                <div>
+                    <p class="page-eyebrow mb-1">OmegaERP</p>
+                    <h1 class="page-title mb-0">{{ page_title|default:"Workspace" }}</h1>
+                </div>
+            </header>
+            {% if vendor_module_nav %}
+            <nav class="module-subnav mb-4">
+                <a class="module-subnav-link {% if request.path == '/vendors/' %}active{% endif %}" href="{% url 'vendor-module' %}">Overview</a>
+                <a class="module-subnav-link {% if request.path == '/vendors/list/' %}active{% endif %}" href="{% url 'vendor-list' %}">Vendor List</a>
+                <a class="module-subnav-link {% if request.path == '/vendors/registration/' %}active{% endif %}" href="{% url 'vendor-registration' %}">Vendor Registration</a>
+            </nav>
+            {% endif %}
+            {% if project_module_nav %}
+            <nav class="module-subnav mb-4">
+                <a class="module-subnav-link {% if request.path == '/projects/' %}active{% endif %}" href="{% url 'project-module' %}">Overview</a>
+                <a class="module-subnav-link {% if request.path == '/projects/master/' %}active{% endif %}" href="{% url 'project-master' %}">Project Master</a>
+                <a class="module-subnav-link {% if request.path == '/projects/distribution/' %}active{% endif %}" href="{% url 'project-distribution' %}">Vendor Distribution</a>
+            </nav>
+            {% endif %}
+            {% if material_module_nav %}
+            <nav class="module-subnav mb-4">
+                <a class="module-subnav-link {% if request.path == '/materials/' %}active{% endif %}" href="{% url 'material-module' %}">Overview</a>
+                <a class="module-subnav-link {% if request.path == '/materials/master/' %}active{% endif %}" href="{% url 'material-master' %}">Material List</a>
+                <a class="module-subnav-link {% if request.path == '/materials/quotation/' %}active{% endif %}" href="{% url 'material-quotation' %}">Quotation Generator</a>
+                <a class="module-subnav-link {% if request.path == '/vendors/planner/' %}active{% endif %}" href="{% url 'vendor-planner' %}">Planner Prototype</a>
+            </nav>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

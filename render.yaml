@@ -1,0 +1,28 @@
+databases:
+  - name: omegadb
+    databaseName: omegadb
+    user: omegaerp
+
+services:
+  - type: web
+    name: omegaerp
+    runtime: python
+    buildCommand: ./build.sh
+    startCommand: gunicorn omegaerp.wsgi:application --log-file -
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: omegaerp.settings.production
+      - key: PYTHON_VERSION
+        value: 3.14.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: false
+      - key: ALLOWED_HOSTS
+        value: omegaerp.onrender.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://omegaerp.onrender.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: omegadb
+          property: connectionString
