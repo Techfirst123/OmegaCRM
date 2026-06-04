@@ -12,6 +12,17 @@
     </div>
 
     <div id="errorContainer" class="alert alert-danger d-none" role="alert"></div>
+    <div class="voice-assistant-panel mb-4" id="voiceAssistantPanel">
+        <div class="voice-assistant-meta">
+            <span class="voice-assistant-badge" id="voiceAssistantBadge">Voice Assistant</span>
+            <strong class="voice-assistant-field" id="voiceAssistantField">Selected Field: None</strong>
+        </div>
+        <div class="voice-assistant-actions">
+            <button type="button" class="btn btn-outline-primary" id="voiceStartBtn" title="Start voice input">Start Voice</button>
+            <button type="button" class="btn btn-outline-secondary" id="voiceStopBtn" title="Stop voice input" disabled>Stop</button>
+        </div>
+        <div class="voice-assistant-status" id="voiceAssistantStatus">Voice input ready</div>
+    </div>
 
     <form id="vendorForm" novalidate>
         {% csrf_token %}

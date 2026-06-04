@@ -5,13 +5,90 @@ const CONFIG = {
         'image/jpeg',
         'image/png'
     ],
-    PDF_WORKER_URL: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js'
+    PDF_WORKER_URL: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js',
+    SPEECH_LANGUAGE: 'en-IN'
 };
 
-const state = { isSubmitting: false, ocrInProgress: false };
+const state = {
+    isSubmitting: false,
+    ocrInProgress: false,
+    voiceRecognition: null,
+    voiceSupported: false,
+    voiceListening: false,
+    activeVoiceFieldId: ''
+};
 
 let currentStep = 1;
 const TOTAL_STEPS = 5;
+
+const VOICE_FIELD_CONFIG = [
+    { id: 'companyName', label: 'Company Name', aliases: ['company name', 'company'] },
+    { id: 'address', label: 'Address', aliases: ['address of firm', 'address line one', 'address'] },
+    { id: 'address2', label: 'Address Line 2', aliases: ['address line two', 'address 2', 'second address'] },
+    { id: 'city', label: 'City', aliases: ['city'] },
+    { id: 'state', label: 'State', aliases: ['state'] },
+    { id: 'pin', label: 'Pin', aliases: ['pin code', 'pin'] },
+    { id: 'country', label: 'Country', aliases: ['country'] },
+    { id: 'vendorType', label: 'Vendor Type', aliases: ['vendor type'] },
+    { id: 'vendorCategory', label: 'Vendor Category', aliases: ['vendor category'] },
+    { id: 'contactPerson', label: 'Contact Person', aliases: ['contact person'] },
+    { id: 'emailId', label: 'Email Id', aliases: ['email id', 'email'] },
+    { id: 'attendeeName', label: 'Attendee Name', aliases: ['attendee name', 'attendee'] },
+    { id: 'bdeName', label: 'BDE Name', aliases: ['bde name', 'contacted by'] },
+    { id: 'meetingWith', label: 'Meeting With', aliases: ['meeting with'] },
+    { id: 'experienceDetails', label: 'Experience Details', aliases: ['experience details', 'experience'] },
+    { id: 'msmeReg', label: 'MSME Reg', aliases: ['msme reg', 'msme registration'] },
+    { id: 'panNo', label: 'PAN No', aliases: ['pan number', 'pan no', 'pan'] },
+    { id: 'pfReg', label: 'PF Reg', aliases: ['pf reg', 'pf registration'] },
+    { id: 'gstNo', label: 'GST No', aliases: ['gst number', 'gst no', 'gst'] },
+    { id: 'gstType', label: 'GST Type', aliases: ['gst type'] },
+    { id: 'gstStatus', label: 'GST Status', aliases: ['gst status'] },
+    { id: 'lastGstr1', label: 'Last GSTR 1', aliases: ['last gstr one', 'last gstr 1'] },
+    { id: 'gstPendingStatus', label: 'Status Pending', aliases: ['status pending', 'gst pending status'] },
+    { id: 'aadhaarNo', label: 'Aadhaar No', aliases: ['aadhaar number', 'aadhar number', 'aadhaar no', 'aadhar no'] },
+    { id: 'labourWelfareFund', label: 'Labour Welfare Fund', aliases: ['labour welfare fund'] },
+    { id: 'professionalTax', label: 'Professional Tax', aliases: ['professional tax'] },
+    { id: 'turnoverYear1', label: 'Turnover Last Financial Year', aliases: ['turnover last financial year', 'turnover year one', 'turnover first year'] },
+    { id: 'turnoverYear2', label: 'Turnover Previous Financial Year', aliases: ['turnover previous financial year', 'turnover year two', 'turnover second year'] },
+    { id: 'turnoverYear3', label: 'Turnover Third Financial Year', aliases: ['turnover third financial year', 'turnover year three'] },
+    { id: 'bankAccountName', label: 'Bank Account Name', aliases: ['bank account name', 'name as per bank account'] },
+    { id: 'bankNameAddress', label: 'Bank Name Address', aliases: ['bank name and address', 'bank name address'] },
+    { id: 'accountType', label: 'Account Type', aliases: ['account type'] },
+    { id: 'accountNumber', label: 'Account Number', aliases: ['account number', 'account no'] },
+    { id: 'bankProofType', label: 'Bank Proof Type', aliases: ['bank proof type', 'proof type'] }
+];
+
+const SELECT_SPEECH_VALUES = {
+    vendorType: {
+        'private limited': 'private limited',
+        'proprietor': 'proprieter',
+        'proprieter': 'proprieter',
+        'partner': 'partner',
+        'individual': 'individual'
+    },
+    vendorCategory: {
+        'service provider': 'service-provider',
+        'service-provider': 'service-provider',
+        'sub contractor': 'sub-contractor',
+        'sub-contractor': 'sub-contractor'
+    },
+    gstPendingStatus: {
+        'more than year': 'more than year',
+        'less than second year': 'less than second year'
+    },
+    accountType: {
+        savings: 'savings',
+        current: 'current',
+        'cash credit': 'cash credit',
+        other: 'other'
+    },
+    bankProofType: {
+        passbook: 'passbook',
+        'cancelled cheque': 'cancelled-cheque',
+        'cancel cheque': 'cancelled-cheque',
+        cheque: 'cancelled-cheque'
+    }
+};
 
 function showStep(stepNumber) {
     currentStep = Math.max(1, Math.min(TOTAL_STEPS, stepNumber));
@@ -277,6 +354,337 @@ function getCookie(name) {
     return v ? v.pop() : '';
 }
 
+function normalizeVoiceText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[_-]+/g, ' ')
+        .replace(/[^\w\s/]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function getVoiceFieldConfig(fieldId) {
+    return VOICE_FIELD_CONFIG.find((item) => item.id === fieldId) || null;
+}
+
+function getLabelTextForField(el) {
+    if (!el) return 'None';
+    const config = getVoiceFieldConfig(el.id);
+    if (config) return config.label;
+    const label = document.querySelector(`label[for="${el.id}"]`);
+    return label ? label.textContent.replace(/\*/g, '').trim() : 'None';
+}
+
+function updateVoiceFieldDisplay() {
+    const fieldLabel = document.getElementById('voiceAssistantField');
+    const target = getActiveVoiceField();
+    if (fieldLabel) fieldLabel.textContent = `Selected Field: ${target ? getLabelTextForField(target) : 'None'}`;
+}
+
+function setVoiceStatus(message, tone = '') {
+    const statusEl = document.getElementById('voiceAssistantStatus');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.classList.remove('listening', 'error');
+    if (tone) statusEl.classList.add(tone);
+}
+
+function updateVoiceButtons() {
+    const startBtn = document.getElementById('voiceStartBtn');
+    const stopBtn = document.getElementById('voiceStopBtn');
+    if (startBtn) startBtn.disabled = !state.voiceSupported || state.voiceListening;
+    if (stopBtn) stopBtn.disabled = !state.voiceSupported || !state.voiceListening;
+}
+
+function dispatchFieldEvents(el) {
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function clearVoiceTargetHighlight() {
+    document.querySelectorAll('.voice-active-target').forEach((el) => el.classList.remove('voice-active-target'));
+}
+
+function setActiveVoiceFieldByElement(el) {
+    const target = el && el.id ? el : null;
+    state.activeVoiceFieldId = target ? target.id : '';
+    clearVoiceTargetHighlight();
+    if (target) target.classList.add('voice-active-target');
+    updateVoiceFieldDisplay();
+}
+
+function getActiveVoiceField() {
+    if (!state.activeVoiceFieldId) return null;
+    return document.getElementById(state.activeVoiceFieldId);
+}
+
+function normalizeEmailVoice(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/\s+at\s+/g, '@')
+        .replace(/\s+dot\s+/g, '.')
+        .replace(/\s+/g, '');
+}
+
+function normalizeCompactVoice(value) {
+    return String(value || '').replace(/\s+/g, '').toUpperCase();
+}
+
+function normalizeMonthVoice(value) {
+    const text = String(value || '').trim();
+    const parsed = new Date(`1 ${text}`);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function applySelectVoiceValue(el, transcript) {
+    const optionMap = SELECT_SPEECH_VALUES[el.id] || {};
+    const normalizedTranscript = normalizeVoiceText(transcript);
+    const mappedEntry = Object.entries(optionMap).find(([spoken]) => normalizedTranscript.includes(normalizeVoiceText(spoken)));
+    if (mappedEntry) {
+        el.value = mappedEntry[1];
+        dispatchFieldEvents(el);
+        return true;
+    }
+
+    const options = Array.from(el.options);
+    const matchedOption = options.find((option) => normalizeVoiceText(option.textContent) === normalizedTranscript)
+        || options.find((option) => normalizedTranscript.includes(normalizeVoiceText(option.textContent)));
+    if (matchedOption) {
+        el.value = matchedOption.value;
+        dispatchFieldEvents(el);
+        return true;
+    }
+    return false;
+}
+
+function applyVoiceValueToField(el, transcript) {
+    if (!el) return false;
+    const raw = String(transcript || '').trim();
+    if (!raw) return false;
+
+    let value = raw;
+    if (el.id === 'emailId') value = normalizeEmailVoice(raw);
+    if (['panNo', 'gstNo', 'aadhaarNo', 'accountNumber', 'msmeReg', 'pfReg'].includes(el.id)) value = normalizeCompactVoice(raw);
+    if (el.id === 'pin') value = raw.replace(/\s+/g, '');
+    if (el.type === 'month') {
+        const monthValue = normalizeMonthVoice(raw);
+        if (!monthValue) return false;
+        el.value = monthValue;
+        dispatchFieldEvents(el);
+        return true;
+    }
+
+    if (el.tagName === 'SELECT') return applySelectVoiceValue(el, raw);
+
+    el.value = value;
+    dispatchFieldEvents(el);
+    return true;
+}
+
+function addVoiceClient(value) {
+    const cleanedValue = String(value || '').trim();
+    if (!cleanedValue) return false;
+    const container = document.getElementById('clientListContainer');
+    if (!container) return false;
+    const rows = Array.from(container.querySelectorAll('.client-name-input'));
+    const lastInput = rows[rows.length - 1];
+    if (lastInput && !lastInput.value.trim()) {
+        lastInput.value = cleanedValue;
+    } else {
+        container.appendChild(createClientEntry(cleanedValue));
+        attachVoiceFieldTracking();
+    }
+    syncClientRemoveButtons();
+    return true;
+}
+
+function setQualificationFromVoice(transcript) {
+    const normalized = normalizeVoiceText(transcript);
+    if (normalized.includes('disqualified')) {
+        const disqualified = document.getElementById('disqualified');
+        if (disqualified) {
+            disqualified.checked = true;
+            dispatchFieldEvents(disqualified);
+            return 'Disqualified';
+        }
+    }
+    if (normalized.includes('qualified')) {
+        const qualified = document.getElementById('qualified');
+        if (qualified) {
+            qualified.checked = true;
+            dispatchFieldEvents(qualified);
+            return 'Qualified';
+        }
+    }
+    return '';
+}
+
+function extractVoiceCommandValue(transcript, aliases) {
+    const normalizedTranscript = normalizeVoiceText(transcript);
+    for (const alias of aliases) {
+        const normalizedAlias = normalizeVoiceText(alias);
+        const patterns = [
+            `${normalizedAlias} is `,
+            `${normalizedAlias} `,
+            `${normalizedAlias}:`
+        ];
+        for (const pattern of patterns) {
+            if (normalizedTranscript.startsWith(pattern)) return transcript.slice(pattern.length).trim();
+        }
+    }
+    return '';
+}
+
+function applyVoiceCommandTranscript(transcript) {
+    const qualification = setQualificationFromVoice(transcript);
+    if (qualification) {
+        setVoiceStatus(`Updated vendor status: ${qualification}`);
+        return true;
+    }
+
+    const clientValue = extractVoiceCommandValue(transcript, ['add client', 'client name', 'client']);
+    if (clientValue) {
+        addVoiceClient(clientValue);
+        setVoiceStatus(`Added client: ${clientValue}`);
+        return true;
+    }
+
+    for (const field of VOICE_FIELD_CONFIG) {
+        const value = extractVoiceCommandValue(transcript, field.aliases);
+        if (!value) continue;
+        const el = document.getElementById(field.id);
+        if (!el) continue;
+        setActiveVoiceFieldByElement(el);
+        if (applyVoiceValueToField(el, value)) {
+            setVoiceStatus(`Updated ${field.label}`);
+            return true;
+        }
+    }
+    return false;
+}
+
+function applyVoiceNavigation(transcript) {
+    const normalized = normalizeVoiceText(transcript);
+    if (normalized === 'next' || normalized === 'next step') {
+        nextStep();
+        setVoiceStatus('Moved to next step');
+        return true;
+    }
+    if (normalized === 'previous' || normalized === 'previous step' || normalized === 'back') {
+        prevStep();
+        setVoiceStatus('Moved to previous step');
+        return true;
+    }
+    if (normalized === 'submit' || normalized === 'submit form') {
+        const form = document.getElementById('vendorForm');
+        if (form) form.requestSubmit();
+        setVoiceStatus('Submitting form');
+        return true;
+    }
+    return false;
+}
+
+function handleVoiceTranscript(transcript) {
+    const cleanedTranscript = String(transcript || '').trim();
+    if (!cleanedTranscript) {
+        setVoiceStatus('No speech detected', 'error');
+        return;
+    }
+    if (applyVoiceNavigation(cleanedTranscript)) return;
+
+    const activeField = getActiveVoiceField();
+    if (activeField && applyVoiceValueToField(activeField, cleanedTranscript)) {
+        setVoiceStatus(`Updated ${getLabelTextForField(activeField)}`);
+        return;
+    }
+
+    if (applyVoiceCommandTranscript(cleanedTranscript)) return;
+
+    setVoiceStatus('Voice input could not match a field', 'error');
+}
+
+function stopVoiceAssistant() {
+    if (!state.voiceRecognition || !state.voiceListening) {
+        updateVoiceButtons();
+        return;
+    }
+    state.voiceRecognition.stop();
+}
+
+function startVoiceAssistant() {
+    if (!state.voiceSupported || !state.voiceRecognition || state.voiceListening) {
+        updateVoiceButtons();
+        return;
+    }
+    state.voiceRecognition.start();
+}
+
+function attachVoiceFieldTracking() {
+    const fieldSelector = '#vendorForm input:not([type="file"]):not([type="radio"]), #vendorForm textarea, #vendorForm select, #clientListContainer .client-name-input';
+    document.querySelectorAll(fieldSelector).forEach((el) => {
+        if (el.dataset.voiceBound === 'true') return;
+        el.dataset.voiceBound = 'true';
+        el.addEventListener('focus', () => setActiveVoiceFieldByElement(el));
+        el.addEventListener('click', () => setActiveVoiceFieldByElement(el));
+    });
+}
+
+function initializeVoiceAssistant() {
+    const startBtn = document.getElementById('voiceStartBtn');
+    const stopBtn = document.getElementById('voiceStopBtn');
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    attachVoiceFieldTracking();
+    updateVoiceFieldDisplay();
+
+    if (!SpeechRecognition) {
+        state.voiceSupported = false;
+        setVoiceStatus('Voice input is not supported in this browser', 'error');
+        updateVoiceButtons();
+        return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = CONFIG.SPEECH_LANGUAGE;
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+        state.voiceListening = true;
+        setVoiceStatus('Listening...', 'listening');
+        updateVoiceButtons();
+    };
+
+    recognition.onresult = (event) => {
+        const transcript = event.results?.[0]?.[0]?.transcript || '';
+        handleVoiceTranscript(transcript);
+    };
+
+    recognition.onerror = (event) => {
+        const message = event.error === 'not-allowed'
+            ? 'Microphone permission was denied'
+            : 'Voice input failed';
+        setVoiceStatus(message, 'error');
+    };
+
+    recognition.onend = () => {
+        state.voiceListening = false;
+        updateVoiceButtons();
+        if (!document.getElementById('voiceAssistantStatus')?.classList.contains('error')) {
+            setVoiceStatus('Voice input ready');
+        }
+    };
+
+    state.voiceRecognition = recognition;
+    state.voiceSupported = true;
+    updateVoiceButtons();
+
+    if (startBtn) startBtn.addEventListener('click', startVoiceAssistant);
+    if (stopBtn) stopBtn.addEventListener('click', stopVoiceAssistant);
+}
+
 function attachStepLabelHandlers() {
     document.querySelectorAll('.step-label').forEach((el) => {
         const step = parseInt(el.dataset.step || '0', 10);
@@ -366,6 +774,7 @@ function resetClientEntries() {
     if (!container) return;
     container.innerHTML = '';
     container.appendChild(createClientEntry(''));
+    attachVoiceFieldTracking();
     syncClientRemoveButtons();
 }
 
@@ -385,6 +794,8 @@ function resetVendorForm() {
     const vendorId = document.getElementById('vendorId');
     if (vendorId) vendorId.textContent = '';
 
+    setActiveVoiceFieldByElement(document.getElementById('companyName'));
+    setVoiceStatus(state.voiceSupported ? 'Voice input ready' : 'Voice input is not supported in this browser');
     updateGstDetailsVisibility();
     showStep(1);
 }
@@ -404,6 +815,7 @@ function attachClientHandlers() {
 
     addClientBtn.addEventListener('click', () => {
         container.appendChild(createClientEntry());
+        attachVoiceFieldTracking();
         syncClientRemoveButtons();
     });
 
@@ -609,8 +1021,8 @@ function showSuccessModal(vendorId) {
     const modalEl = document.getElementById('successModal');
     if (modalEl && window.bootstrap) {
         const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modalEl.addEventListener('hidden.bs.modal', resetVendorForm, { once: true });
         modal.show();
-        resetVendorForm();
     }
 }
 
@@ -637,6 +1049,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     attachStepLabelHandlers();
     attachClientHandlers();
+    initializeVoiceAssistant();
     updateGstDetailsVisibility();
     showStep(1);
+    setActiveVoiceFieldByElement(document.getElementById('companyName'));
 });

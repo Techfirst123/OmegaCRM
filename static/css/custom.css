@@ -293,6 +293,63 @@ body {
     display: block;
 }
 
+.voice-assistant-panel {
+    align-items: center;
+    background: linear-gradient(180deg, rgba(243, 249, 255, 0.96), rgba(255, 255, 255, 0.98));
+    border: 1px solid rgba(18, 63, 113, 0.10);
+    border-radius: 14px;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1.2fr) auto;
+    padding: 1rem 1.15rem;
+}
+
+.voice-assistant-meta {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.voice-assistant-badge {
+    color: var(--accent-deep);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.voice-assistant-field {
+    color: var(--text);
+    font-family: "Trebuchet MS", Georgia, serif;
+    font-size: 1rem;
+}
+
+.voice-assistant-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    justify-content: end;
+}
+
+.voice-assistant-status {
+    color: var(--muted);
+    font-size: 0.9rem;
+    grid-column: 1 / -1;
+}
+
+.voice-assistant-status.listening {
+    color: var(--accent-deep);
+    font-weight: 700;
+}
+
+.voice-assistant-status.error {
+    color: var(--accent-warm);
+    font-weight: 700;
+}
+
+.voice-active-target {
+    border-color: rgba(28, 155, 209, 0.55) !important;
+    box-shadow: 0 0 0 0.25rem rgba(28, 155, 209, 0.16) !important;
+}
+
 .step-label {
     border-bottom: 2px solid transparent;
     color: #6c757d;
@@ -650,6 +707,14 @@ body {
         gap: 0.75rem;
         overflow-x: auto;
         white-space: nowrap;
+    }
+
+    .voice-assistant-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .voice-assistant-actions {
+        justify-content: start;
     }
 
     .review-row {
