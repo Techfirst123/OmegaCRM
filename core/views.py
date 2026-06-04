@@ -6,6 +6,8 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from xml.etree import ElementTree as ET
 
+from django.conf import settings
+from django.http import Http404
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -21,6 +23,7 @@ from .models import (
     Vendor,
     WorkPackage,
 )
+from .storage_backends import build_blob_download_response
 
 
 def _normalize_material_header(value):
@@ -838,3 +841,12 @@ def register_vendor(request):
     except Exception as e:
         traceback.print_exc()
         return JsonResponse({'error': 'server error'}, status=500)
+
+
+def media_blob_proxy(request, blob_path):
+    if not settings.BLOB_READ_WRITE_TOKEN:
+        raise Http404('Blob storage is not configured.')
+    try:
+        return build_blob_download_response(blob_path)
+    except Exception as exc:
+        raise Http404('File not found.') from exc

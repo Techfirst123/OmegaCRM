@@ -90,6 +90,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+BLOB_READ_WRITE_TOKEN = env('BLOB_READ_WRITE_TOKEN', default='')
+VERCEL_BLOB_ACCESS = env('VERCEL_BLOB_ACCESS', default='private')
 
 STORAGES = {
     'default': {
@@ -99,6 +101,11 @@ STORAGES = {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
+
+if BLOB_READ_WRITE_TOKEN:
+    STORAGES['default'] = {
+        'BACKEND': 'core.storage_backends.VercelPrivateMediaStorage',
+    }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -120,4 +127,3 @@ X_FRAME_OPTIONS = 'DENY'
 SECURE_REFERRER_POLICY = 'same-origin'
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = False
-

@@ -56,6 +56,7 @@ Required keys:
 - `EMAIL_USE_SSL`
 - `OPENAI_API_KEY`
 - `THIRD_PARTY_API_KEY`
+- `BLOB_READ_WRITE_TOKEN`
 
 Example PostgreSQL URL:
 
@@ -122,7 +123,8 @@ python manage.py collectstatic --noinput
 ```
 
 - Media uploads are stored in `media/` locally
-- For production, use object storage instead of local disk
+- When `BLOB_READ_WRITE_TOKEN` is present, Django stores uploads in Vercel Blob instead of local disk
+- This repository is configured to use a private Vercel Blob store for vendor documents in production
 
 ### Gunicorn
 
