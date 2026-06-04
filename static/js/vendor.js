@@ -326,6 +326,13 @@ function showBankProofStatus(message, level) {
     statusEl.textContent = message;
 }
 
+function clearBankProofStatus() {
+    const statusEl = document.getElementById('bankProofStatus');
+    if (!statusEl) return;
+    statusEl.className = 'file-upload-status mt-2 alert p-2';
+    statusEl.textContent = '';
+}
+
 function updateGstDetailsVisibility() {
     const gstNo = document.getElementById('gstNo').value.trim();
     const section = document.getElementById('gstDetailsSection');
@@ -352,6 +359,34 @@ function createClientEntry(value = '') {
         syncClientRemoveButtons();
     });
     return row;
+}
+
+function resetClientEntries() {
+    const container = document.getElementById('clientListContainer');
+    if (!container) return;
+    container.innerHTML = '';
+    container.appendChild(createClientEntry(''));
+    syncClientRemoveButtons();
+}
+
+function resetVendorForm() {
+    const form = document.getElementById('vendorForm');
+    if (!form) return;
+
+    form.reset();
+    resetClientEntries();
+    clearBankProofStatus();
+    state.ocrInProgress = false;
+    state.isSubmitting = false;
+
+    const errorContainer = document.getElementById('errorContainer');
+    if (errorContainer) errorContainer.classList.add('d-none');
+
+    const vendorId = document.getElementById('vendorId');
+    if (vendorId) vendorId.textContent = '';
+
+    updateGstDetailsVisibility();
+    showStep(1);
 }
 
 function syncClientRemoveButtons() {
@@ -572,7 +607,11 @@ function showSuccessModal(vendorId) {
     const idEl = document.getElementById('vendorId');
     if (idEl) idEl.textContent = vendorId;
     const modalEl = document.getElementById('successModal');
-    if (modalEl && window.bootstrap) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    if (modalEl && window.bootstrap) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+        resetVendorForm();
+    }
 }
 
 function copyVendorId() {
