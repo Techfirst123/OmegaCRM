@@ -185,7 +185,43 @@ Practical recommendation:
 
 The repository includes a starter `render.yaml` for the Render path. Update the hostname values before using it.
 
-This project is not a strong fit for a Vercel-first deployment because the current app is server-rendered Django with database-backed workflows and uploaded files, rather than a lightweight stateless frontend plus serverless API.
+This project can be deployed to Vercel using Django support, but there are a couple of operational constraints to keep in mind:
+
+- use a hosted PostgreSQL database, not local Postgres
+- use object storage for user-uploaded media
+- keep static files in the build via `collectstatic`
+
+### Vercel Deployment
+
+Vercel added zero-configuration Django support in April 2026, so this repository includes a small [vercel.json](C:/Users/lenovo/Desktop/slack/OmegaERP/vercel.json) only to make the static build step explicit.
+
+Recommended Vercel environment variables:
+
+```env
+DJANGO_SETTINGS_MODULE=omegaerp.settings.production
+SECRET_KEY=replace-with-a-long-random-value
+DEBUG=False
+DATABASE_URL=postgresql://user:password@host:5432/dbname
+ALLOWED_HOSTS=.vercel.app,your-production-domain.com
+CSRF_TRUSTED_ORIGINS=https://your-project.vercel.app,https://your-production-domain.com
+USE_X_FORWARDED_HOST=True
+SECURE_SSL_REDIRECT=True
+SESSION_COOKIE_SECURE=True
+CSRF_COOKIE_SECURE=True
+SECURE_HSTS_SECONDS=31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS=True
+SECURE_HSTS_PRELOAD=True
+```
+
+Deploy steps:
+
+1. Import the GitHub repository into Vercel.
+2. Keep the detected framework as `Django`.
+3. Add the production environment variables above.
+4. Trigger the first deployment.
+5. After deploy, set the exact Vercel hostname in `CSRF_TRUSTED_ORIGINS`.
+
+If you need database schema changes, run them against the hosted PostgreSQL database before or immediately after the first production deploy.
 
 ## Security Notes
 

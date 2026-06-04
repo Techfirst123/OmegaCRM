@@ -18,6 +18,7 @@ staticfiles/
 
 # Node / frontend
 node_modules/
+.vercel/
 
 # Editors / tooling
 .vscode/
@@ -27,3 +28,5 @@ node_modules/
 *.log
 Thumbs.db
 .DS_Store
+
+.vercel
