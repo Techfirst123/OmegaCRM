@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block content %}
 <section class="surface-panel">
@@ -21,6 +22,7 @@
                     <th>Email</th>
                     <th>Status</th>
                     <th>Created</th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -37,14 +39,41 @@
                     <td>{{ vendor.email_id|default:"-" }}</td>
                     <td><span class="status-pill {{ vendor.qualification_status|default:'unknown' }}">{{ vendor.qualification_status|default:"pending" }}</span></td>
                     <td>{{ vendor.created_at|date:"d M Y, h:i A" }}</td>
+                    <td>
+                        <button type="button" class="btn btn-sm btn-outline-primary vendor-view-btn" data-vendor-id="{{ vendor.vendor_id }}">
+                            View
+                        </button>
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8" class="text-center py-5 text-muted">No vendors available yet.</td>
+                    <td colspan="9" class="text-center py-5 text-muted">No vendors available yet.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </section>
+
+<div class="vendor-detail-backdrop" id="vendorDetailBackdrop"></div>
+<aside class="vendor-detail-drawer" id="vendorDetailDrawer" aria-hidden="true">
+    <div class="vendor-detail-header">
+        <div>
+            <p class="vendor-detail-kicker mb-1">Vendor Detail View</p>
+            <h4 class="vendor-detail-title mb-1" id="vendorDetailTitle">Vendor Details</h4>
+            <div class="vendor-detail-subtitle" id="vendorDetailSubtitle">Review complete vendor information from the list.</div>
+        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="vendorDetailCloseBtn">Close</button>
+    </div>
+    <div class="vendor-detail-status-row">
+        <span class="status-pill unknown" id="vendorDetailStatus">Pending</span>
+        <span class="vendor-detail-created" id="vendorDetailCreated">-</span>
+    </div>
+    <div class="vendor-detail-body" id="vendorDetailBody"></div>
+</aside>
+{% endblock %}
+
+{% block scripts %}
+{{ vendor_detail_rows|json_script:"vendor-detail-data" }}
+<script src="{% static 'js/vendor-list.js' %}?v={% now "U" %}"></script>
 {% endblock %}

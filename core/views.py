@@ -250,6 +250,65 @@ def _serialize_project_allocations(project):
     return rows
 
 
+def _parse_client_list(value):
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    return [item.strip() for item in str(value).split(',') if item.strip()]
+
+
+def _serialize_vendor_detail_rows(queryset):
+    rows = []
+    for vendor in queryset:
+        rows.append({
+            'vendor_id': vendor.vendor_id or '',
+            'company_name': vendor.company_name or '',
+            'experience_details': vendor.experience_details or '',
+            'address': vendor.address or '',
+            'address2': vendor.address2 or '',
+            'city': vendor.city or '',
+            'state': vendor.state or '',
+            'pin_code': vendor.pin_code or '',
+            'country': vendor.country or '',
+            'vendor_type': vendor.vendor_type or '',
+            'vendor_category': vendor.vendor_category or '',
+            'contact_person': vendor.contact_person or '',
+            'email_id': vendor.email_id or '',
+            'attendee_name': vendor.attendee_name or '',
+            'bde_name': vendor.bde_name or '',
+            'meeting_with': vendor.meeting_with or '',
+            'qualification_status': vendor.qualification_status or '',
+            'msme_reg': vendor.msme_reg or '',
+            'pan_no': vendor.pan_no or '',
+            'pf_reg': vendor.pf_reg or '',
+            'gst_no': vendor.gst_no or '',
+            'gst_type': vendor.gst_type or '',
+            'gst_status': vendor.gst_status or '',
+            'last_gstr1': vendor.last_gstr1 or '',
+            'gst_pending_status': vendor.gst_pending_status or '',
+            'aadhaar_no': vendor.aadhaar_no or '',
+            'labour_welfare_fund': vendor.labour_welfare_fund or '',
+            'professional_tax': vendor.professional_tax or '',
+            'turnover_year_1': vendor.turnover_year_1 or '',
+            'turnover_year_2': vendor.turnover_year_2 or '',
+            'turnover_year_3': vendor.turnover_year_3 or '',
+            'bank_account_name': vendor.bank_account_name or '',
+            'bank_name_address': vendor.bank_name_address or '',
+            'account_type': vendor.account_type or '',
+            'account_number': vendor.account_number or '',
+            'bank_proof_type': vendor.bank_proof_type or '',
+            'client_list': _parse_client_list(vendor.client_list_data),
+            'bank_proof_url': vendor.passbook_file.url if vendor.passbook_file else '',
+            'created_at': vendor.created_at.strftime('%d %b %Y, %I:%M %p') if vendor.created_at else '',
+        })
+    return rows
+
+
 def index(request):
     vendors = list(Vendor.objects.order_by('-created_at'))
     vendor_count = len(vendors)
@@ -349,6 +408,7 @@ def vendor_list(request):
         'page_title': 'Vendor List',
         'vendor_module_nav': True,
         'vendors': vendors,
+        'vendor_detail_rows': _serialize_vendor_detail_rows(vendors),
     }
     return render(request, 'vendor_list.html', context)
 
