@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 from urllib.parse import urlparse
 
 import environ
@@ -25,9 +26,18 @@ PORTAL_PRIMARY_COLOR = env('VENDOR_PORTAL_PRIMARY_COLOR', default='#0d5cab')
 PORTAL_REFRESH_THRESHOLD_SECONDS = env.int('VENDOR_PORTAL_REFRESH_THRESHOLD_SECONDS', default=60 * 30)
 ALLOWED_HOSTS = env.list('VENDOR_PORTAL_ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
 portal_public_host = urlparse(PORTAL_PUBLIC_URL).hostname or ''
-for host in ['.vercel.app', portal_public_host]:
+for host in ['.vercel.app', '.onrender.com', portal_public_host, os.environ.get('VERCEL_URL', '')]:
     if host and host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(host)
+CSRF_TRUSTED_ORIGINS = env.list('VENDOR_PORTAL_CSRF_TRUSTED_ORIGINS', default=[])
+for origin in [
+    'https://*.vercel.app',
+    'https://*.onrender.com',
+    f'https://{portal_public_host}' if portal_public_host else '',
+    f"https://{os.environ.get('VERCEL_URL', '')}" if os.environ.get('VERCEL_URL') else '',
+]:
+    if origin and origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
 
 INSTALLED_APPS = [
     'django.contrib.contenttypes',

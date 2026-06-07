@@ -1,9 +1,30 @@
+import os
+
 from .base import *  # noqa: F403,F401
 
 DEBUG = env.bool('DEBUG', default=False)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])  # noqa: F405
+for host in [
+    '.vercel.app',
+    '.onrender.com',
+    'omegaerp.vercel.app',
+    'omegaerp.onrender.com',
+    os.environ.get('VERCEL_URL', ''),
+]:
+    if host and host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
+
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])  # noqa: F405
+for origin in [
+    'https://*.vercel.app',
+    'https://*.onrender.com',
+    'https://omegaerp.vercel.app',
+    'https://omegaerp.onrender.com',
+    f"https://{os.environ.get('VERCEL_URL', '')}" if os.environ.get('VERCEL_URL') else '',
+]:
+    if origin and origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = env.bool('USE_X_FORWARDED_HOST', default=True)  # noqa: F405
