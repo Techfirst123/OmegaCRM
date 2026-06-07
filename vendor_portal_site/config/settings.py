@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urlparse
 
 import environ
 
@@ -15,7 +16,6 @@ environ.Env.read_env(ERP_ROOT / '.env')
 
 SECRET_KEY = env('VENDOR_PORTAL_SECRET_KEY', default=env('SECRET_KEY'))
 DEBUG = env.bool('VENDOR_PORTAL_DEBUG', default=True)
-ALLOWED_HOSTS = env.list('VENDOR_PORTAL_ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
 ERP_API_BASE_URL = env('ERP_API_BASE_URL', default='http://127.0.0.1:8000/api/vendor-portal')
 PORTAL_BRAND_NAME = env('VENDOR_PORTAL_BRAND_NAME', default='Omega Vendor Portal')
 PORTAL_APP_SUBTITLE = env('VENDOR_PORTAL_APP_SUBTITLE', default='Standalone field reporting')
@@ -23,6 +23,11 @@ PORTAL_SUPPORT_EMAIL = env('VENDOR_PORTAL_SUPPORT_EMAIL', default='support@omega
 PORTAL_PUBLIC_URL = env('VENDOR_PORTAL_PUBLIC_URL', default='http://127.0.0.1:8001')
 PORTAL_PRIMARY_COLOR = env('VENDOR_PORTAL_PRIMARY_COLOR', default='#0d5cab')
 PORTAL_REFRESH_THRESHOLD_SECONDS = env.int('VENDOR_PORTAL_REFRESH_THRESHOLD_SECONDS', default=60 * 30)
+ALLOWED_HOSTS = env.list('VENDOR_PORTAL_ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
+portal_public_host = urlparse(PORTAL_PUBLIC_URL).hostname or ''
+for host in ['.vercel.app', portal_public_host]:
+    if host and host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
 
 INSTALLED_APPS = [
     'django.contrib.contenttypes',
