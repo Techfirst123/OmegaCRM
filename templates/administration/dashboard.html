@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-panel procurement-hero mb-4">
+    <div>
+        <p class="hero-kicker mb-2">Settings & Administration</p>
+        <h2 class="hero-title">Central ERP Control Center</h2>
+        <p class="hero-copy">Manage user profiles, security, company identity, ERP configuration, audit controls, and operational preferences from one place.</p>
+    </div>
+    <div class="hero-metrics">
+        <div class="metric-chip"><span>Role</span><strong>{{ assignment_role_label }}</strong></div>
+        <div class="metric-chip"><span>Open Tickets</span><strong>{{ open_tickets }}</strong></div>
+    </div>
+</section>
+
+<section class="surface-panel mb-4">
+    <div class="procurement-metric-grid">
+        <div class="prototype-summary-card"><span>Total Users</span><strong>{{ total_users }}</strong></div>
+        <div class="prototype-summary-card"><span>Active Users</span><strong>{{ active_users }}</strong></div>
+        <div class="prototype-summary-card"><span>My Vendors</span><strong>{{ my_vendor_count }}</strong></div>
+        <div class="prototype-summary-card"><span>My Open Tasks</span><strong>{{ my_task_count }}</strong></div>
+    </div>
+</section>
+
+<div class="row g-4">
+    <div class="col-xl-6">
+        <section class="surface-panel h-100">
+            <div class="section-heading">
+                <h3 class="section-title">Recent Session Activity</h3>
+                <p class="section-copy">Login history and device activity for your account.</p>
+            </div>
+            <div class="stack-list">
+                {% for row in login_history %}
+                <div class="stack-item stack-item-block">
+                    <div>
+                        <strong>{{ row.ip_address|default:"Unknown IP" }}</strong>
+                        <p class="mb-1">{{ row.user_agent|truncatechars:90|default:"Device info not captured" }}</p>
+                        <div class="small text-muted">{{ row.logged_in_at|date:"d M Y, h:i A" }}</div>
+                    </div>
+                    <span class="status-pill {% if row.is_active %}qualified{% else %}disqualified{% endif %}">{% if row.is_active %}Active{% else %}Closed{% endif %}</span>
+                </div>
+                {% empty %}
+                <p class="empty-state mb-0">No session history recorded yet.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+    <div class="col-xl-6">
+        <section class="surface-panel h-100">
+            <div class="section-heading">
+                <h3 class="section-title">Recent Notifications</h3>
+                <p class="section-copy">ERP and workflow notifications addressed to your account.</p>
+            </div>
+            <div class="stack-list">
+                {% for row in my_notifications %}
+                <div class="stack-item stack-item-block">
+                    <div>
+                        <strong>{{ row.title }}</strong>
+                        <p class="mb-1">{{ row.message|truncatechars:120 }}</p>
+                        <div class="small text-muted">{{ row.created_at|date:"d M Y, h:i A" }}</div>
+                    </div>
+                    <span class="status-pill {{ row.status }}">{{ row.get_status_display }}</span>
+                </div>
+                {% empty %}
+                <p class="empty-state mb-0">No notifications available yet.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+    <div class="col-12">
+        <section class="surface-panel">
+            <div class="section-heading">
+                <h3 class="section-title">System Snapshot</h3>
+                <p class="section-copy">Current company and ERP identity settings in effect.</p>
+            </div>
+            <div class="table-responsive">
+                <table class="table procurement-table align-middle">
+                    <thead><tr><th>Area</th><th>Current Setting</th></tr></thead>
+                    <tbody>
+                        <tr><td>Company Name</td><td>{{ company_setting.company_name }}</td></tr>
+                        <tr><td>Financial Year</td><td>{{ erp_configuration.financial_year|default:"-" }}</td></tr>
+                        <tr><td>PO Number Format</td><td>{{ erp_configuration.po_number_format|default:"-" }}</td></tr>
+                        <tr><td>Vendor Code Format</td><td>{{ erp_configuration.vendor_code_format|default:"-" }}</td></tr>
+                        <tr><td>Project Code Format</td><td>{{ erp_configuration.project_code_format|default:"-" }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+

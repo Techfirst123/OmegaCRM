@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="surface-panel">
+    <div class="section-heading">
+        <h3 class="section-title">System Health</h3>
+        <p class="section-copy">Live operational status for server, database, storage, sessions, and API surfaces.</p>
+    </div>
+    <div class="procurement-metric-grid">
+        <div class="prototype-summary-card"><span>Server</span><strong>{{ server_status }}</strong></div>
+        <div class="prototype-summary-card"><span>Database</span><strong>{{ database_status }}</strong></div>
+        <div class="prototype-summary-card"><span>Storage Usage</span><strong>{{ storage_usage_mb }} MB</strong></div>
+        <div class="prototype-summary-card"><span>Active Users</span><strong>{{ active_users }}</strong></div>
+        <div class="prototype-summary-card"><span>Background Jobs</span><strong>{{ background_jobs }}</strong></div>
+        <div class="prototype-summary-card"><span>API Status</span><strong>{{ api_status }}</strong></div>
+    </div>
+</section>
+{% endblock %}
+

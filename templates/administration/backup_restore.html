@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xl-4">
+        <section class="surface-panel form-shell mb-4">
+            <div class="section-heading"><h3 class="section-title">Manual Backup</h3></div>
+            <form method="post" class="d-grid gap-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="backup">
+                {% for field in backup_form %}
+                {% if field.name == 'note' %}
+                <div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>
+                {% endif %}
+                {% endfor %}
+                <button type="submit" class="btn btn-primary">Create Backup</button>
+            </form>
+        </section>
+        <section class="surface-panel form-shell">
+            <div class="section-heading"><h3 class="section-title">Restore Backup</h3></div>
+            <form method="post" enctype="multipart/form-data" class="d-grid gap-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="restore">
+                {% for field in backup_form %}
+                {% if field.name == 'restore_file' %}
+                <div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>
+                {% endif %}
+                {% endfor %}
+                <button type="submit" class="btn btn-outline-danger">Restore Uploaded Backup</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-xl-8">
+        <section class="surface-panel">
+            <div class="section-heading"><h3 class="section-title">Backup History</h3></div>
+            <div class="table-responsive">
+                <table class="table procurement-table align-middle">
+                    <thead><tr><th>Type</th><th>Note</th><th>Created By</th><th>Created</th><th>Download</th></tr></thead>
+                    <tbody>
+                        {% for row in backup_rows %}
+                        <tr>
+                            <td>{{ row.get_backup_type_display }}</td>
+                            <td>{{ row.note|default:"-" }}</td>
+                            <td>{{ row.created_by.username|default:"System" }}</td>
+                            <td>{{ row.created_at|date:"d M Y, h:i A" }}</td>
+                            <td>{% if row.file %}<a href="{{ row.file.url }}" target="_blank" rel="noopener">Download</a>{% else %}-{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center text-muted py-4">No backup records yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+

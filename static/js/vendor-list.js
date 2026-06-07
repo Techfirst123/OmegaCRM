@@ -1,121 +1,166 @@
 const vendorDetailData = JSON.parse(document.getElementById('vendor-detail-data')?.textContent || '[]');
 
-function vdEscape(value) {
-    const div = document.createElement('div');
-    div.textContent = value;
-    return div.innerHTML;
+const drawerState = {
+    activeVendorId: '',
+    isSaving: false
+};
+
+const drawerFieldMap = {
+    company_name: 'drawerCompanyName',
+    address: 'drawerAddress',
+    address2: 'drawerAddress2',
+    city: 'drawerCity',
+    state: 'drawerState',
+    pin_code: 'drawerPin',
+    country: 'drawerCountry',
+    vendor_type: 'drawerVendorType',
+    vendor_category: 'drawerVendorCategory',
+    contact_person: 'drawerContactPerson',
+    email_id: 'drawerEmailId',
+    attendee_name: 'drawerAttendeeName',
+    bde_name: 'drawerBdeName',
+    meeting_with: 'drawerMeetingWith',
+    experience_details: 'drawerExperienceDetails',
+    msme_reg: 'drawerMsmeReg',
+    pan_no: 'drawerPanNo',
+    pf_reg: 'drawerPfReg',
+    aadhaar_no: 'drawerAadhaarNo',
+    gst_no: 'drawerGstNo',
+    gst_type: 'drawerGstType',
+    gst_status: 'drawerGstStatus',
+    last_gstr1: 'drawerLastGstr1',
+    gst_pending_status: 'drawerGstPendingStatus',
+    labour_welfare_fund: 'drawerLabourWelfareFund',
+    professional_tax: 'drawerProfessionalTax',
+    turnover_year_1: 'drawerTurnoverYear1',
+    turnover_year_2: 'drawerTurnoverYear2',
+    turnover_year_3: 'drawerTurnoverYear3',
+    bank_account_name: 'drawerBankAccountName',
+    bank_name_address: 'drawerBankNameAddress',
+    account_type: 'drawerAccountType',
+    account_number: 'drawerAccountNumber',
+    bank_proof_type: 'drawerBankProofType',
+    qualification_status: 'drawerQualificationStatus'
+};
+
+function sanitizeText(value) {
+    const node = document.createElement('div');
+    node.textContent = value;
+    return node.innerHTML;
 }
 
-function vdDisplay(value) {
-    if (value && typeof value === 'object' && value.html) return value.html;
-    const text = Array.isArray(value) ? value.filter(Boolean).join(', ') : String(value || '').trim();
-    return text ? vdEscape(text).replace(/\n/g, '<br>') : '<span class="vendor-detail-empty">Not provided</span>';
-}
-
-function vdStatusClass(value) {
-    const normalized = String(value || '').trim().toLowerCase();
-    return normalized || 'unknown';
-}
-
-function vdStatusText(value) {
+function formatStatus(value) {
     const normalized = String(value || '').trim();
-    if (!normalized) return 'Pending';
-    return normalized.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+    return normalized
+        ? normalized.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+        : 'Pending';
 }
 
-function buildVendorSection(title, rows) {
-    const content = rows.map(([label, value]) => `
-        <div class="vendor-detail-row">
-            <div class="vendor-detail-label">${vdEscape(label)}</div>
-            <div class="vendor-detail-value">${vdDisplay(value)}</div>
-        </div>
-    `).join('');
-
-    return `
-        <section class="vendor-detail-section">
-            <div class="vendor-detail-section-title">${vdEscape(title)}</div>
-            <div class="vendor-detail-grid">${content}</div>
-        </section>
-    `;
+function statusClass(value) {
+    return String(value || '').trim().toLowerCase() || 'unknown';
 }
 
-function renderVendorDrawer(vendor) {
+function getCookie(name) {
+    const match = document.cookie.match(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`);
+    return match ? match.pop() : '';
+}
+
+function getDrawerElements() {
+    return {
+        drawer: document.getElementById('vendorDetailDrawer'),
+        backdrop: document.getElementById('vendorDetailBackdrop'),
+        form: document.getElementById('vendorDetailForm'),
+        banner: document.getElementById('vendorDetailBanner'),
+        title: document.getElementById('vendorDetailTitle'),
+        subtitle: document.getElementById('vendorDetailSubtitle'),
+        status: document.getElementById('vendorDetailStatus'),
+        created: document.getElementById('vendorDetailCreated'),
+        vendorId: document.getElementById('drawerVendorId'),
+        saveButtons: [
+            document.getElementById('vendorDetailSaveBtn'),
+            document.getElementById('vendorDetailFooterSaveBtn')
+        ].filter(Boolean)
+    };
+}
+
+function showDrawerBanner(message, tone) {
+    const banner = document.getElementById('vendorDetailBanner');
+    if (!banner) return;
+    banner.className = `vendor-detail-banner alert alert-${tone || 'info'}`;
+    banner.innerHTML = Array.isArray(message)
+        ? message.map((item) => `<div>${sanitizeText(String(item))}</div>`).join('')
+        : sanitizeText(String(message || ''));
+}
+
+function hideDrawerBanner() {
+    const banner = document.getElementById('vendorDetailBanner');
+    if (!banner) return;
+    banner.className = 'vendor-detail-banner d-none';
+    banner.textContent = '';
+}
+
+function setDrawerSavingState(isSaving) {
+    drawerState.isSaving = isSaving;
+    getDrawerElements().saveButtons.forEach((button) => {
+        button.disabled = isSaving;
+        button.textContent = isSaving ? 'Saving...' : 'Save Changes';
+    });
+}
+
+function findVendor(vendorId) {
+    return vendorDetailData.find((item) => item.vendor_id === vendorId) || null;
+}
+
+function setFieldValue(fieldId, value) {
+    const field = document.getElementById(fieldId);
+    if (!field) return;
+    field.value = value || '';
+}
+
+function fillDrawerForm(vendor) {
+    Object.entries(drawerFieldMap).forEach(([vendorKey, fieldId]) => {
+        setFieldValue(fieldId, vendor[vendorKey]);
+    });
+
+    setFieldValue('drawerClientListData', (vendor.client_list || []).join(', '));
+    setFieldValue('drawerVendorId', vendor.vendor_id);
+    setFieldValue('drawerBankProofFile', '');
+
     const title = document.getElementById('vendorDetailTitle');
     const subtitle = document.getElementById('vendorDetailSubtitle');
     const status = document.getElementById('vendorDetailStatus');
     const created = document.getElementById('vendorDetailCreated');
-    const body = document.getElementById('vendorDetailBody');
+    const proofName = document.getElementById('drawerBankProofName');
+    const proofLink = document.getElementById('drawerBankProofLink');
 
-    if (title) title.textContent = `${vendor.company_name || 'Vendor'} Details`;
-    if (subtitle) subtitle.textContent = `${vendor.vendor_id || '-'} | ${vendor.vendor_type || 'Vendor profile'}`;
+    if (title) title.textContent = vendor.company_name || 'Vendor Details';
+    if (subtitle) subtitle.textContent = `${vendor.vendor_id || '-'} | ${vendor.contact_person || 'Primary contact pending'}`;
     if (status) {
-        status.textContent = vdStatusText(vendor.qualification_status);
-        status.className = `status-pill ${vdStatusClass(vendor.qualification_status)}`;
+        status.className = `status-pill ${statusClass(vendor.qualification_status)}`;
+        status.textContent = formatStatus(vendor.qualification_status);
     }
     if (created) created.textContent = vendor.created_at || '-';
-
-    const sections = [
-        buildVendorSection('Company Information', [
-            ['Vendor ID', vendor.vendor_id],
-            ['Company Name', vendor.company_name],
-            ['Address', [vendor.address, vendor.address2].filter(Boolean).join(', ')],
-            ['City', vendor.city],
-            ['State', vendor.state],
-            ['Pin Code', vendor.pin_code],
-            ['Country', vendor.country],
-            ['Experience Details', vendor.experience_details]
-        ]),
-        buildVendorSection('Contact Information', [
-            ['Vendor Type', vendor.vendor_type],
-            ['Vendor Category', vendor.vendor_category],
-            ['Contact Person', vendor.contact_person],
-            ['Email Id', vendor.email_id],
-            ['Attendee Name', vendor.attendee_name],
-            ['Contacted By (BDE)', vendor.bde_name],
-            ['Meeting With', vendor.meeting_with]
-        ]),
-        buildVendorSection('KYC Information', [
-            ['MSME Reg', vendor.msme_reg],
-            ['PAN No', vendor.pan_no],
-            ['PF Reg', vendor.pf_reg],
-            ['GST No', vendor.gst_no],
-            ['GST Type', vendor.gst_type],
-            ['GST Status', vendor.gst_status],
-            ['Last GSTR-1', vendor.last_gstr1],
-            ['Status Pending', vendor.gst_pending_status],
-            ['Aadhaar No', vendor.aadhaar_no],
-            ['Labour Welfare Fund', vendor.labour_welfare_fund],
-            ['Professional Tax', vendor.professional_tax],
-            ['Client List', vendor.client_list]
-        ]),
-        buildVendorSection('Financial Details', [
-            ['Turnover Last Financial Year', vendor.turnover_year_1],
-            ['Turnover Previous Financial Year', vendor.turnover_year_2],
-            ['Turnover Third Financial Year', vendor.turnover_year_3],
-            ['Name as per Bank A/C', vendor.bank_account_name],
-            ['Bank Name & Address', vendor.bank_name_address],
-            ['Account Type', vendor.account_type],
-            ['Account Number', vendor.account_number],
-            ['Bank Proof Type', vendor.bank_proof_type],
-            ['Bank Proof File', vendor.bank_proof_url ? { html: `<a href="${vdEscape(vendor.bank_proof_url)}" target="_blank" rel="noopener">Open uploaded document</a>` } : '']
-        ]),
-        buildVendorSection('Registration Audit', [
-            ['Status', vdStatusText(vendor.qualification_status)],
-            ['Created At', vendor.created_at]
-        ])
-    ];
-
-    if (body) body.innerHTML = sections.join('');
+    if (proofName) proofName.textContent = vendor.bank_proof_name || 'No document uploaded';
+    if (proofLink) {
+        if (vendor.bank_proof_url) {
+            proofLink.href = vendor.bank_proof_url;
+            proofLink.classList.remove('d-none');
+        } else {
+            proofLink.removeAttribute('href');
+            proofLink.classList.add('d-none');
+        }
+    }
 }
 
 function openVendorDrawer(vendorId) {
-    const vendor = vendorDetailData.find((item) => item.vendor_id === vendorId);
+    const vendor = findVendor(vendorId);
     if (!vendor) return;
 
-    renderVendorDrawer(vendor);
+    fillDrawerForm(vendor);
+    hideDrawerBanner();
+    drawerState.activeVendorId = vendorId;
 
-    const drawer = document.getElementById('vendorDetailDrawer');
-    const backdrop = document.getElementById('vendorDetailBackdrop');
+    const { drawer, backdrop } = getDrawerElements();
     if (drawer) {
         drawer.classList.add('is-open');
         drawer.setAttribute('aria-hidden', 'false');
@@ -125,25 +170,129 @@ function openVendorDrawer(vendorId) {
 }
 
 function closeVendorDrawer() {
-    const drawer = document.getElementById('vendorDetailDrawer');
-    const backdrop = document.getElementById('vendorDetailBackdrop');
+    if (drawerState.isSaving) return;
+    const { drawer, backdrop, form } = getDrawerElements();
     if (drawer) {
         drawer.classList.remove('is-open');
         drawer.setAttribute('aria-hidden', 'true');
     }
     if (backdrop) backdrop.classList.remove('is-visible');
+    if (form) form.reset();
+    hideDrawerBanner();
+    drawerState.activeVendorId = '';
     document.body.classList.remove('overflow-hidden');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function updateLocalVendor(updatedVendor) {
+    const index = vendorDetailData.findIndex((item) => item.vendor_id === updatedVendor.vendor_id);
+    if (index === -1) {
+        vendorDetailData.unshift(updatedVendor);
+    } else {
+        vendorDetailData[index] = updatedVendor;
+    }
+}
+
+function updateVendorTableRow(vendor) {
+    const button = document.querySelector(`.vendor-view-btn[data-vendor-id="${CSS.escape(vendor.vendor_id)}"]`);
+    const row = button ? button.closest('tr') : null;
+    if (!row) return;
+
+    const cells = row.querySelectorAll('td');
+    if (cells[1]) {
+        cells[1].innerHTML = `
+            <div class="fw-semibold">${sanitizeText(vendor.company_name || '-')}</div>
+            <div class="small text-muted">${sanitizeText(vendor.city || '-')}, ${sanitizeText(vendor.state || '-')}</div>
+        `;
+    }
+    if (cells[2]) cells[2].textContent = vendor.vendor_type || '-';
+    if (cells[3]) cells[3].textContent = vendor.vendor_category || '-';
+    if (cells[4]) cells[4].textContent = vendor.contact_person || '-';
+    if (cells[5]) cells[5].textContent = vendor.email_id || '-';
+    if (cells[6]) {
+        cells[6].innerHTML = `<span class="status-pill ${statusClass(vendor.qualification_status)}">${sanitizeText(vendor.qualification_status || 'pending')}</span>`;
+    }
+}
+
+function buildUpdateUrl(vendorId) {
+    return VENDOR_UPDATE_URL_TEMPLATE.replace('__VENDOR_ID__', encodeURIComponent(vendorId));
+}
+
+function collectVendorFormData() {
+    const form = document.getElementById('vendorDetailForm');
+    const formData = new FormData(form);
+    const clientsField = document.getElementById('drawerClientListData');
+    const clients = String(clientsField?.value || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+    formData.set('clientListData', JSON.stringify(clients));
+    if (!document.getElementById('drawerBankProofFile')?.files?.length) {
+        formData.delete('bankProofFile');
+    }
+    return formData;
+}
+
+async function submitVendorUpdate(event) {
+    event.preventDefault();
+    if (drawerState.isSaving || !drawerState.activeVendorId) return;
+
+    const form = document.getElementById('vendorDetailForm');
+    if (!form?.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    setDrawerSavingState(true);
+    hideDrawerBanner();
+
+    try {
+        const response = await fetch(buildUpdateUrl(drawerState.activeVendorId), {
+            method: 'POST',
+            body: collectVendorFormData(),
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            showDrawerBanner(data.error || 'Unable to update vendor details.', 'danger');
+            return;
+        }
+
+        const updatedVendor = data.vendor || null;
+        if (!updatedVendor) {
+            showDrawerBanner('Vendor updated, but the refreshed data could not be loaded.', 'warning');
+            return;
+        }
+
+        updateLocalVendor(updatedVendor);
+        fillDrawerForm(updatedVendor);
+        updateVendorTableRow(updatedVendor);
+        showDrawerBanner(data.message || 'Vendor details updated successfully.', 'success');
+    } catch (error) {
+        console.error(error);
+        showDrawerBanner('Network error while updating vendor details.', 'danger');
+    } finally {
+        setDrawerSavingState(false);
+    }
+}
+
+function wireDrawerActions() {
     document.querySelectorAll('.vendor-view-btn').forEach((button) => {
         button.addEventListener('click', () => openVendorDrawer(button.dataset.vendorId || ''));
     });
 
     document.getElementById('vendorDetailCloseBtn')?.addEventListener('click', closeVendorDrawer);
+    document.getElementById('vendorDetailCancelBtn')?.addEventListener('click', closeVendorDrawer);
     document.getElementById('vendorDetailBackdrop')?.addEventListener('click', closeVendorDrawer);
+    document.getElementById('vendorDetailForm')?.addEventListener('submit', submitVendorUpdate);
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') closeVendorDrawer();
     });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    wireDrawerActions();
 });

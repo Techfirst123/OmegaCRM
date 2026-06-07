@@ -1,0 +1,66 @@
+{% extends "portal/base.html" %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xl-4">
+        <section class="surface-panel form-shell">
+            <div class="section-heading"><h3 class="section-title">Upload Document</h3></div>
+            <form method="post" enctype="multipart/form-data" class="d-grid gap-3">
+                {% csrf_token %}
+                <div>
+                    <label class="form-label" for="assignment">Assigned Project / Site</label>
+                    <select class="form-select" id="assignment" name="assignment" required>
+                        <option value="">Select assignment</option>
+                        {% for row in assignment_options %}
+                        <option value="{{ row.id }}">{{ row.project_code }} - {{ row.project_name }} | {{ row.work_type }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" for="daily_update">Link Daily Update</label>
+                    <select class="form-select" id="daily_update" name="daily_update">
+                        <option value="">Optional</option>
+                        {% for row in daily_update_options %}
+                        <option value="{{ row.id }}">{{ row.update_date }} | {{ row.project_name }} | {{ row.work_category }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" for="document_type">Document Type</label>
+                    <select class="form-select" id="document_type" name="document_type">
+                        {% for value, label in document_type_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div><label class="form-label" for="file">File</label><input class="form-control" id="file" name="file" type="file" required></div>
+                <div><label class="form-label" for="remarks">Remarks</label><textarea class="form-control" id="remarks" name="remarks" rows="2"></textarea></div>
+                <button class="btn btn-primary" type="submit">Upload Document</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-xl-8">
+        <section class="surface-panel">
+            <div class="section-heading"><h3 class="section-title">Document Register</h3></div>
+            <div class="table-responsive">
+                <table class="table procurement-table align-middle">
+                    <thead><tr><th>Project</th><th>Type</th><th>Remarks</th><th>Uploaded</th><th>File</th></tr></thead>
+                    <tbody>
+                        {% for row in document_rows %}
+                        <tr>
+                            <td>{{ row.project_name }}</td>
+                            <td>{{ row.document_type_label }}</td>
+                            <td>{{ row.remarks|default:"-" }}</td>
+                            <td>{{ row.upload_date }}</td>
+                            <td><a href="{{ row.file_url }}" target="_blank" rel="noopener">Open</a></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center py-4 text-muted">No documents uploaded yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

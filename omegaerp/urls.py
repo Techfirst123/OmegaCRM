@@ -5,6 +5,12 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('administration/', include('administration.urls')),
+    path('procurement/', include('purchase_orders.urls')),
+    path('procurement/vendors/', include('vendors.urls')),
+    path('procurement/reports/', include('reports.urls')),
+    path('vendor-control/', include('vendors.management_urls')),
+    path('api/vendor-portal/', include('vendor_portal.api_urls')),
     path('', include('core.urls')),
 ]
 

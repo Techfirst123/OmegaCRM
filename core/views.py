@@ -1,15 +1,18 @@
+import datetime
 import json
 import re
 import traceback
 import zipfile
+from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from xml.etree import ElementTree as ET
 
 from django.conf import settings
+from django.contrib.auth import logout
 from django.http import Http404
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from .material_catalog import DEFAULT_BUSINESS_UNITS, DEFAULT_WORK_PACKAGES, MATERIAL_IMPORT_SCHEMA
@@ -24,6 +27,27 @@ from .models import (
     WorkPackage,
 )
 from .storage_backends import build_blob_download_response
+
+VENDOR_TYPE_OPTIONS = ['private limited', 'proprieter', 'partner', 'individual']
+VENDOR_CATEGORY_OPTIONS = ['service-provider', 'sub-contractor']
+ACCOUNT_TYPE_OPTIONS = ['savings', 'current', 'cash credit', 'other']
+BANK_PROOF_TYPE_OPTIONS = ['passbook', 'cancelled-cheque']
+QUALIFICATION_STATUS_OPTIONS = ['qualified', 'disqualified']
+GST_PENDING_STATUS_OPTIONS = ['more than year', 'less than second year']
+
+PROJECT_STATUS_RUNNING = 'running'
+PROJECT_STATUS_COMPLETED = 'completed'
+PROJECT_STATUS_ALIGNED = 'aligned'
+PROJECT_STATUS_ORDER = [
+    PROJECT_STATUS_RUNNING,
+    PROJECT_STATUS_COMPLETED,
+    PROJECT_STATUS_ALIGNED,
+]
+PROJECT_STATUS_LABELS = {
+    PROJECT_STATUS_RUNNING: 'Running',
+    PROJECT_STATUS_COMPLETED: 'Completed',
+    PROJECT_STATUS_ALIGNED: 'Aligned',
+}
 
 
 def _normalize_material_header(value):
@@ -241,9 +265,14 @@ def _serialize_project_allocations(project):
         rows.append({
             'id': allocation.id,
             'work_package': allocation.work_package.name if allocation.work_package else '',
+            'work_package_id': allocation.work_package_id or '',
             'vendor_id': allocation.vendor.vendor_id if allocation.vendor else '',
             'vendor_name': allocation.vendor.company_name if allocation.vendor else '',
             'allocated_mw': '' if allocation.allocated_mw is None else str(allocation.allocated_mw),
+            'completed_mw': '' if allocation.completed_mw is None else str(allocation.completed_mw),
+            'timeline_start_date': allocation.timeline_start_date.isoformat() if allocation.timeline_start_date else '',
+            'timeline_end_date': allocation.timeline_end_date.isoformat() if allocation.timeline_end_date else '',
+            'actual_completion_date': allocation.actual_completion_date.isoformat() if allocation.actual_completion_date else '',
             'status': allocation.status or '',
             'scope_note': allocation.scope_note or '',
         })
@@ -262,71 +291,398 @@ def _parse_client_list(value):
     return [item.strip() for item in str(value).split(',') if item.strip()]
 
 
+def _serialize_vendor_detail(vendor):
+    return {
+        'vendor_id': vendor.vendor_id or '',
+        'company_name': vendor.company_name or '',
+        'experience_details': vendor.experience_details or '',
+        'address': vendor.address or '',
+        'address2': vendor.address2 or '',
+        'city': vendor.city or '',
+        'state': vendor.state or '',
+        'pin_code': vendor.pin_code or '',
+        'country': vendor.country or '',
+        'vendor_type': vendor.vendor_type or '',
+        'vendor_category': vendor.vendor_category or '',
+        'contact_person': vendor.contact_person or '',
+        'email_id': vendor.email_id or '',
+        'attendee_name': vendor.attendee_name or '',
+        'bde_name': vendor.bde_name or '',
+        'meeting_with': vendor.meeting_with or '',
+        'qualification_status': vendor.qualification_status or '',
+        'msme_reg': vendor.msme_reg or '',
+        'pan_no': vendor.pan_no or '',
+        'pf_reg': vendor.pf_reg or '',
+        'gst_no': vendor.gst_no or '',
+        'gst_type': vendor.gst_type or '',
+        'gst_status': vendor.gst_status or '',
+        'last_gstr1': vendor.last_gstr1 or '',
+        'gst_pending_status': vendor.gst_pending_status or '',
+        'aadhaar_no': vendor.aadhaar_no or '',
+        'labour_welfare_fund': vendor.labour_welfare_fund or '',
+        'professional_tax': vendor.professional_tax or '',
+        'turnover_year_1': vendor.turnover_year_1 or '',
+        'turnover_year_2': vendor.turnover_year_2 or '',
+        'turnover_year_3': vendor.turnover_year_3 or '',
+        'bank_account_name': vendor.bank_account_name or '',
+        'bank_name_address': vendor.bank_name_address or '',
+        'account_type': vendor.account_type or '',
+        'account_number': vendor.account_number or '',
+        'bank_proof_type': vendor.bank_proof_type or '',
+        'client_list': _parse_client_list(vendor.client_list_data),
+        'bank_proof_url': vendor.passbook_file.url if vendor.passbook_file else '',
+        'bank_proof_name': vendor.passbook_file.name.split('/')[-1] if vendor.passbook_file else '',
+        'created_at': vendor.created_at.strftime('%d %b %Y, %I:%M %p') if vendor.created_at else '',
+    }
+
+
 def _serialize_vendor_detail_rows(queryset):
+    return [_serialize_vendor_detail(vendor) for vendor in queryset]
+
+
+def _normalize_project_status(raw_status):
+    normalized = (raw_status or '').strip().lower().replace('_', ' ').replace('-', ' ')
+    if normalized in {'running', 'active', 'in progress', 'ongoing', 'execution'}:
+        return PROJECT_STATUS_RUNNING
+    if normalized in {'completed', 'complete', 'closed', 'finished', 'commissioned'}:
+        return PROJECT_STATUS_COMPLETED
+    if normalized in {'aligned', 'assigned', 'planned', 'awarded', 'pipeline', 'new'}:
+        return PROJECT_STATUS_ALIGNED
+    return PROJECT_STATUS_ALIGNED
+
+
+def _parse_project_geography(location_text):
+    parts = [part.strip() for part in str(location_text or '').split(',') if part.strip()]
+    district = parts[-3] if len(parts) >= 3 else (parts[0] if len(parts) == 1 else 'Unspecified District')
+    state = parts[-2] if len(parts) >= 2 else 'Unspecified State'
+    country = parts[-1] if len(parts) >= 1 else 'Unspecified Country'
+    return {
+        'district': district or 'Unspecified District',
+        'state': state or 'Unspecified State',
+        'country': country or 'Unspecified Country',
+    }
+
+
+def _empty_status_totals():
+    return {status: Decimal('0') for status in PROJECT_STATUS_ORDER}
+
+
+def _build_dashboard_chart_payload(geo_totals):
+    labels = []
+    running_values = []
+    completed_values = []
+    aligned_values = []
+    total_values = []
+    vendor_counts = []
+
+    for name, totals in geo_totals.items():
+        labels.append(name)
+        running_values.append(float(totals[PROJECT_STATUS_RUNNING]))
+        completed_values.append(float(totals[PROJECT_STATUS_COMPLETED]))
+        aligned_values.append(float(totals[PROJECT_STATUS_ALIGNED]))
+        total_values.append(
+            float(
+                totals[PROJECT_STATUS_RUNNING]
+                + totals[PROJECT_STATUS_COMPLETED]
+                + totals[PROJECT_STATUS_ALIGNED]
+            )
+        )
+        vendor_counts.append(len(totals.get('vendor_ids', set())))
+
+    return {
+        'labels': labels,
+        'running': running_values,
+        'completed': completed_values,
+        'aligned': aligned_values,
+        'total': total_values,
+        'vendor_counts': vendor_counts,
+    }
+
+
+def _build_project_dashboard_metrics(projects):
+    status_totals = _empty_status_totals()
+    country_totals = defaultdict(lambda: {**_empty_status_totals(), 'vendor_ids': set()})
+    state_totals = defaultdict(lambda: {**_empty_status_totals(), 'vendor_ids': set()})
+    district_totals = defaultdict(lambda: {**_empty_status_totals(), 'vendor_ids': set()})
+
+    for project in projects:
+        project_mw = project.total_mw or Decimal('0')
+        status_key = _normalize_project_status(project.status)
+        geography = _parse_project_geography(project.project_location)
+        vendor_ids = {
+            allocation.vendor_id
+            for allocation in project.allocations.all()
+            if allocation.vendor_id
+        }
+
+        status_totals[status_key] += project_mw
+        country_totals[geography['country']][status_key] += project_mw
+        state_totals[geography['state']][status_key] += project_mw
+        district_totals[geography['district']][status_key] += project_mw
+        country_totals[geography['country']]['vendor_ids'].update(vendor_ids)
+        state_totals[geography['state']]['vendor_ids'].update(vendor_ids)
+        district_totals[geography['district']]['vendor_ids'].update(vendor_ids)
+
+    def sorted_geo(source):
+        return dict(
+            sorted(
+                source.items(),
+                key=lambda item: (
+                    item[1][PROJECT_STATUS_RUNNING]
+                    + item[1][PROJECT_STATUS_COMPLETED]
+                    + item[1][PROJECT_STATUS_ALIGNED]
+                ),
+                reverse=True,
+            )
+        )
+
+    return {
+        'status_totals': status_totals,
+        'country_chart': _build_dashboard_chart_payload(sorted_geo(country_totals)),
+        'state_chart': _build_dashboard_chart_payload(sorted_geo(state_totals)),
+        'district_chart': _build_dashboard_chart_payload(sorted_geo(district_totals)),
+    }
+
+
+def _serialize_project_progress_rows(projects):
     rows = []
-    for vendor in queryset:
-        rows.append({
-            'vendor_id': vendor.vendor_id or '',
-            'company_name': vendor.company_name or '',
-            'experience_details': vendor.experience_details or '',
-            'address': vendor.address or '',
-            'address2': vendor.address2 or '',
-            'city': vendor.city or '',
-            'state': vendor.state or '',
-            'pin_code': vendor.pin_code or '',
-            'country': vendor.country or '',
-            'vendor_type': vendor.vendor_type or '',
-            'vendor_category': vendor.vendor_category or '',
-            'contact_person': vendor.contact_person or '',
-            'email_id': vendor.email_id or '',
-            'attendee_name': vendor.attendee_name or '',
-            'bde_name': vendor.bde_name or '',
-            'meeting_with': vendor.meeting_with or '',
-            'qualification_status': vendor.qualification_status or '',
-            'msme_reg': vendor.msme_reg or '',
-            'pan_no': vendor.pan_no or '',
-            'pf_reg': vendor.pf_reg or '',
-            'gst_no': vendor.gst_no or '',
-            'gst_type': vendor.gst_type or '',
-            'gst_status': vendor.gst_status or '',
-            'last_gstr1': vendor.last_gstr1 or '',
-            'gst_pending_status': vendor.gst_pending_status or '',
-            'aadhaar_no': vendor.aadhaar_no or '',
-            'labour_welfare_fund': vendor.labour_welfare_fund or '',
-            'professional_tax': vendor.professional_tax or '',
-            'turnover_year_1': vendor.turnover_year_1 or '',
-            'turnover_year_2': vendor.turnover_year_2 or '',
-            'turnover_year_3': vendor.turnover_year_3 or '',
-            'bank_account_name': vendor.bank_account_name or '',
-            'bank_name_address': vendor.bank_name_address or '',
-            'account_type': vendor.account_type or '',
-            'account_number': vendor.account_number or '',
-            'bank_proof_type': vendor.bank_proof_type or '',
-            'client_list': _parse_client_list(vendor.client_list_data),
-            'bank_proof_url': vendor.passbook_file.url if vendor.passbook_file else '',
-            'created_at': vendor.created_at.strftime('%d %b %Y, %I:%M %p') if vendor.created_at else '',
-        })
+    for project in projects:
+        geography = _parse_project_geography(project.project_location)
+        for allocation in project.allocations.select_related('vendor', 'work_package').all():
+            allocated_mw = allocation.allocated_mw or Decimal('0')
+            completed_mw = allocation.completed_mw or Decimal('0')
+            progress_percent = Decimal('0')
+            if allocated_mw > 0:
+                progress_percent = (completed_mw / allocated_mw) * Decimal('100')
+            rows.append({
+                'project_id': project.id,
+                'project_code': project.project_code or '',
+                'project_name': project.project_name or '',
+                'district': geography['district'],
+                'state': geography['state'],
+                'country': geography['country'],
+                'vendor_id': allocation.vendor.vendor_id if allocation.vendor else '',
+                'vendor_name': allocation.vendor.company_name if allocation.vendor else '',
+                'work_package': allocation.work_package.name if allocation.work_package else '',
+                'allocated_mw': float(allocated_mw),
+                'completed_mw': float(completed_mw),
+                'pending_mw': float(max(allocated_mw - completed_mw, Decimal('0'))),
+                'progress_percent': float(progress_percent.quantize(Decimal('0.01'))),
+                'timeline_start_date': allocation.timeline_start_date.isoformat() if allocation.timeline_start_date else '',
+                'timeline_end_date': allocation.timeline_end_date.isoformat() if allocation.timeline_end_date else '',
+                'actual_completion_date': allocation.actual_completion_date.isoformat() if allocation.actual_completion_date else '',
+                'status': allocation.status or '',
+                'scope_note': allocation.scope_note or '',
+            })
     return rows
 
 
-def index(request):
-    vendors = list(Vendor.objects.order_by('-created_at'))
-    vendor_count = len(vendors)
-    qualified_count = sum(1 for vendor in vendors if vendor.qualification_status == 'qualified')
-    disqualified_count = sum(1 for vendor in vendors if vendor.qualification_status == 'disqualified')
-    other_count = max(vendor_count - qualified_count - disqualified_count, 0)
-    category_counts = {
-        'service-provider': sum(1 for vendor in vendors if vendor.vendor_category == 'service-provider'),
-        'sub-contractor': sum(1 for vendor in vendors if vendor.vendor_category == 'sub-contractor'),
+def _clean_vendor_clients(value):
+    if isinstance(value, list):
+        raw_items = value
+    else:
+        try:
+            raw_items = json.loads(value or '[]')
+        except (TypeError, ValueError, json.JSONDecodeError):
+            raw_items = str(value or '').split(',')
+
+    if isinstance(raw_items, str):
+        raw_items = [raw_items]
+
+    cleaned = []
+    for item in raw_items:
+        normalized = str(item).strip().strip('[]"\'')
+        if normalized:
+            cleaned.append(normalized)
+    return cleaned
+
+
+def _validate_vendor_payload(payload, files, require_file):
+    company_name = (payload.get('companyName') or '').strip()
+    experience = (payload.get('experienceDetails') or '').strip()
+    client_list_data = payload.get('clientListData', '[]')
+    vendor_type = (payload.get('vendorType') or '').strip()
+    vendor_category = (payload.get('vendorCategory') or '').strip()
+    contact_person = (payload.get('contactPerson') or '').strip()
+    email_id = (payload.get('emailId') or '').strip()
+    attendee = (payload.get('attendeeName') or '').strip()
+    bde = (payload.get('bdeName') or '').strip()
+    meeting_with = (payload.get('meetingWith') or '').strip()
+    msme_reg = (payload.get('msmeReg') or '').strip()
+    pan_no = (payload.get('panNo') or '').strip().upper()
+    pf_reg = (payload.get('pfReg') or '').strip()
+    gst_no = (payload.get('gstNo') or '').strip().upper()
+    gst_type = (payload.get('gstType') or '').strip()
+    gst_status = (payload.get('gstStatus') or '').strip()
+    last_gstr1 = (payload.get('lastGstr1') or '').strip()
+    gst_pending_status = (payload.get('gstPendingStatus') or '').strip()
+    aadhaar_no = (payload.get('aadhaarNo') or '').strip()
+    labour_welfare_fund = (payload.get('labourWelfareFund') or '').strip()
+    professional_tax = (payload.get('professionalTax') or '').strip()
+    turnover_year_1 = (payload.get('turnoverYear1') or '').strip()
+    turnover_year_2 = (payload.get('turnoverYear2') or '').strip()
+    turnover_year_3 = (payload.get('turnoverYear3') or '').strip()
+    bank_account_name = (payload.get('bankAccountName') or '').strip()
+    bank_name_address = (payload.get('bankNameAddress') or '').strip()
+    account_type = (payload.get('accountType') or '').strip()
+    account_number = (payload.get('accountNumber') or '').strip()
+    bank_proof_type = (payload.get('bankProofType') or '').strip()
+    qualification = (payload.get('qualification_status') or '').strip()
+    address = (payload.get('address') or '').strip()
+    address2 = (payload.get('address2') or '').strip()
+    city = (payload.get('city') or '').strip()
+    state = (payload.get('state') or '').strip()
+    pin = (payload.get('pin') or '').strip()
+    country = (payload.get('country') or '').strip()
+    cleaned_clients = _clean_vendor_clients(client_list_data)
+
+    errors = []
+    if not company_name:
+        errors.append('companyName is required')
+    if not address:
+        errors.append('address is required')
+    if not city:
+        errors.append('city is required')
+    if not state:
+        errors.append('state is required')
+    if not pin:
+        errors.append('pin is required')
+    if not country:
+        errors.append('country is required')
+    if not experience:
+        errors.append('experienceDetails is required')
+    if not cleaned_clients:
+        errors.append('At least one client is required')
+    if vendor_type not in VENDOR_TYPE_OPTIONS:
+        errors.append('vendorType is invalid')
+    if vendor_category not in VENDOR_CATEGORY_OPTIONS:
+        errors.append('vendorCategory is invalid')
+    if not contact_person:
+        errors.append('contactPerson is required')
+    if not email_id:
+        errors.append('emailId is required')
+    if not attendee:
+        errors.append('attendeeName is required')
+    if not bde:
+        errors.append('bdeName is required')
+    if not meeting_with:
+        errors.append('meetingWith is required')
+    if not msme_reg:
+        errors.append('msmeReg is required')
+    if not pan_no:
+        errors.append('panNo is required')
+    if not pf_reg:
+        errors.append('pfReg is required')
+    if not aadhaar_no:
+        errors.append('aadhaarNo is required')
+    if gst_no and not all([gst_type, gst_status, last_gstr1, gst_pending_status]):
+        errors.append('Complete GST details are required when GST No is provided')
+    if gst_pending_status and gst_pending_status not in GST_PENDING_STATUS_OPTIONS:
+        errors.append('gstPendingStatus is invalid')
+    if not turnover_year_1:
+        errors.append('turnoverYear1 is required')
+    if not turnover_year_2:
+        errors.append('turnoverYear2 is required')
+    if not turnover_year_3:
+        errors.append('turnoverYear3 is required')
+    if not bank_account_name:
+        errors.append('bankAccountName is required')
+    if not bank_name_address:
+        errors.append('bankNameAddress is required')
+    if account_type not in ACCOUNT_TYPE_OPTIONS:
+        errors.append('accountType is invalid')
+    if not account_number:
+        errors.append('accountNumber is required')
+    if bank_proof_type not in BANK_PROOF_TYPE_OPTIONS:
+        errors.append('bankProofType is invalid')
+    if qualification not in QUALIFICATION_STATUS_OPTIONS:
+        errors.append('qualification_status is invalid')
+
+    allowed_types = ['application/pdf', 'image/jpeg', 'image/png']
+    max_size = 5 * 1024 * 1024
+    upload_file = files.get('bankProofFile')
+    if upload_file:
+        if upload_file.size > max_size:
+            errors.append('bankProofFile exceeds max size 5MB')
+        if getattr(upload_file, 'content_type', '') not in allowed_types:
+            errors.append('bankProofFile invalid file type')
+    elif require_file:
+        errors.append('bankProofFile is required')
+
+    cleaned_data = {
+        'company_name': company_name,
+        'experience_details': experience,
+        'address': address,
+        'address2': address2,
+        'city': city,
+        'state': state,
+        'pin_code': pin,
+        'country': country,
+        'vendor_type': vendor_type,
+        'vendor_category': vendor_category,
+        'contact_person': contact_person,
+        'email_id': email_id,
+        'attendee_name': attendee,
+        'bde_name': bde,
+        'meeting_with': meeting_with,
+        'qualification_status': qualification,
+        'msme_reg': msme_reg,
+        'pan_no': pan_no,
+        'pf_reg': pf_reg,
+        'gst_no': gst_no,
+        'gst_type': gst_type,
+        'gst_status': gst_status,
+        'last_gstr1': last_gstr1,
+        'gst_pending_status': gst_pending_status,
+        'aadhaar_no': aadhaar_no,
+        'labour_welfare_fund': labour_welfare_fund,
+        'professional_tax': professional_tax,
+        'turnover_year_1': turnover_year_1,
+        'turnover_year_2': turnover_year_2,
+        'turnover_year_3': turnover_year_3,
+        'bank_account_name': bank_account_name,
+        'bank_name_address': bank_name_address,
+        'account_type': account_type,
+        'account_number': account_number,
+        'bank_proof_type': bank_proof_type,
+        'client_list_data': json.dumps(cleaned_clients),
     }
+    return cleaned_data, errors
+
+
+def index(request):
+    projects = list(ProjectMaster.objects.prefetch_related('allocations').order_by('-created_at'))
+    dashboard_metrics = _build_project_dashboard_metrics(projects)
+    progress_rows = _serialize_project_progress_rows(projects)
+    total_mw = sum((project.total_mw or Decimal('0') for project in projects), Decimal('0'))
+    district_options = sorted({row['district'] for row in progress_rows if row['district']})
     context = {
         'page_title': 'Dashboard',
-        'vendor_count': vendor_count,
-        'qualified_count': qualified_count,
-        'disqualified_count': disqualified_count,
-        'other_count': other_count,
-        'status_chart_data': json.dumps([qualified_count, disqualified_count, other_count]),
-        'category_chart_data': json.dumps([category_counts['service-provider'], category_counts['sub-contractor']]),
+        'project_count': len(projects),
+        'total_mw': total_mw,
+        'running_mw': dashboard_metrics['status_totals'][PROJECT_STATUS_RUNNING],
+        'completed_mw': dashboard_metrics['status_totals'][PROJECT_STATUS_COMPLETED],
+        'aligned_mw': dashboard_metrics['status_totals'][PROJECT_STATUS_ALIGNED],
+        'status_summary_chart_data': json.dumps(
+            [
+                float(dashboard_metrics['status_totals'][PROJECT_STATUS_RUNNING]),
+                float(dashboard_metrics['status_totals'][PROJECT_STATUS_COMPLETED]),
+                float(dashboard_metrics['status_totals'][PROJECT_STATUS_ALIGNED]),
+            ]
+        ),
+        'country_chart_data': json.dumps(dashboard_metrics['country_chart']),
+        'state_chart_data': json.dumps(dashboard_metrics['state_chart']),
+        'district_chart_data': json.dumps(dashboard_metrics['district_chart']),
+        'progress_project_options': json.dumps([
+            {
+                'id': project.id,
+                'project_code': project.project_code or '',
+                'project_name': project.project_name or '',
+            }
+            for project in projects
+        ]),
+        'progress_district_options': json.dumps(district_options),
+        'project_progress_rows': json.dumps(progress_rows),
     }
     return render(request, 'dashboard.html', context)
 
@@ -683,14 +1039,27 @@ def save_project_distribution(request):
         for vendor in Vendor.objects.values('id', 'vendor_id')
     }
 
+    def parse_date_value(raw_value):
+        value = str(raw_value or '').strip()
+        if not value:
+            return None
+        try:
+            return datetime.date.fromisoformat(value)
+        except ValueError:
+            return None
+
     cleaned_rows = []
     total_allocated = Decimal('0')
     for index, row in enumerate(allocation_rows, start=1):
         work_package_id = str(row.get('workPackageId') or '').strip()
         vendor_id = (row.get('vendorId') or '').strip()
         allocated_mw = _to_decimal_or_none(row.get('allocatedMw'))
+        completed_mw = _to_decimal_or_none(row.get('completedMw'))
         status = (row.get('status') or '').strip()
         scope_note = (row.get('scopeNote') or '').strip()
+        timeline_start_date = parse_date_value(row.get('timelineStartDate'))
+        timeline_end_date = parse_date_value(row.get('timelineEndDate'))
+        actual_completion_date = parse_date_value(row.get('actualCompletionDate'))
 
         if not work_package_id or work_package_id not in work_package_ids:
             return JsonResponse({'error': f'Valid work package is required in row {index}'}, status=400)
@@ -698,12 +1067,32 @@ def save_project_distribution(request):
             return JsonResponse({'error': f'Valid vendor is required in row {index}'}, status=400)
         if allocated_mw is None or allocated_mw <= 0:
             return JsonResponse({'error': f'Allocated MW must be greater than zero in row {index}'}, status=400)
+        if completed_mw is None:
+            completed_mw = Decimal('0')
+        if completed_mw < 0:
+            return JsonResponse({'error': f'Completed MW cannot be negative in row {index}'}, status=400)
+        if completed_mw > allocated_mw:
+            return JsonResponse({'error': f'Completed MW cannot exceed allocated MW in row {index}'}, status=400)
+        if row.get('timelineStartDate') and not timeline_start_date:
+            return JsonResponse({'error': f'Valid timeline start date is required in row {index}'}, status=400)
+        if row.get('timelineEndDate') and not timeline_end_date:
+            return JsonResponse({'error': f'Valid timeline end date is required in row {index}'}, status=400)
+        if row.get('actualCompletionDate') and not actual_completion_date:
+            return JsonResponse({'error': f'Valid actual completion date is required in row {index}'}, status=400)
+        if timeline_start_date and timeline_end_date and timeline_end_date < timeline_start_date:
+            return JsonResponse({'error': f'Timeline end date cannot be earlier than start date in row {index}'}, status=400)
+        if actual_completion_date and timeline_start_date and actual_completion_date < timeline_start_date:
+            return JsonResponse({'error': f'Actual completion date cannot be earlier than timeline start date in row {index}'}, status=400)
 
         total_allocated += allocated_mw
         cleaned_rows.append({
             'work_package_id': work_package_ids[work_package_id],
             'vendor_pk': vendor_lookup[vendor_id],
             'allocated_mw': allocated_mw,
+            'completed_mw': completed_mw,
+            'timeline_start_date': timeline_start_date,
+            'timeline_end_date': timeline_end_date,
+            'actual_completion_date': actual_completion_date,
             'status': status,
             'scope_note': scope_note,
         })
@@ -718,6 +1107,10 @@ def save_project_distribution(request):
             work_package_id=row['work_package_id'],
             vendor_id=row['vendor_pk'],
             allocated_mw=row['allocated_mw'],
+            completed_mw=row['completed_mw'],
+            timeline_start_date=row['timeline_start_date'],
+            timeline_end_date=row['timeline_end_date'],
+            actual_completion_date=row['actual_completion_date'],
             status=row['status'],
             scope_note=row['scope_note'],
         )
@@ -735,170 +1128,49 @@ def register_vendor(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     try:
-        company_name = request.POST.get('companyName', '').strip()
-        experience = request.POST.get('experienceDetails', '').strip()
-        client_list_data = request.POST.get('clientListData', '[]').strip()
-        vendor_type = request.POST.get('vendorType', '').strip()
-        vendor_category = request.POST.get('vendorCategory', '').strip()
-        contact_person = request.POST.get('contactPerson', '').strip()
-        email_id = request.POST.get('emailId', '').strip()
-        attendee = request.POST.get('attendeeName', '').strip()
-        bde = request.POST.get('bdeName', '').strip()
-        meeting_with = request.POST.get('meetingWith', '').strip()
-        msme_reg = request.POST.get('msmeReg', '').strip()
-        pan_no = request.POST.get('panNo', '').strip()
-        pf_reg = request.POST.get('pfReg', '').strip()
-        gst_no = request.POST.get('gstNo', '').strip()
-        gst_type = request.POST.get('gstType', '').strip()
-        gst_status = request.POST.get('gstStatus', '').strip()
-        last_gstr1 = request.POST.get('lastGstr1', '').strip()
-        gst_pending_status = request.POST.get('gstPendingStatus', '').strip()
-        aadhaar_no = request.POST.get('aadhaarNo', '').strip()
-        labour_welfare_fund = request.POST.get('labourWelfareFund', '').strip()
-        professional_tax = request.POST.get('professionalTax', '').strip()
-        turnover_year_1 = request.POST.get('turnoverYear1', '').strip()
-        turnover_year_2 = request.POST.get('turnoverYear2', '').strip()
-        turnover_year_3 = request.POST.get('turnoverYear3', '').strip()
-        bank_account_name = request.POST.get('bankAccountName', '').strip()
-        bank_name_address = request.POST.get('bankNameAddress', '').strip()
-        account_type = request.POST.get('accountType', '').strip()
-        account_number = request.POST.get('accountNumber', '').strip()
-        bank_proof_type = request.POST.get('bankProofType', '').strip()
-        qualification = request.POST.get('qualification_status', '').strip()
-        address = request.POST.get('address', '').strip()
-        address2 = request.POST.get('address2', '').strip()
-        city = request.POST.get('city', '').strip()
-        state = request.POST.get('state', '').strip()
-        pin = request.POST.get('pin', '').strip()
-        country = request.POST.get('country', '').strip()
-
-        try:
-            parsed_clients = json.loads(client_list_data or '[]')
-        except json.JSONDecodeError:
-            parsed_clients = [
-                item.strip()
-                for item in client_list_data.split(',')
-                if item.strip()
-            ]
-        if isinstance(parsed_clients, str):
-            parsed_clients = [parsed_clients]
-        cleaned_clients = []
-        for client in parsed_clients:
-            cleaned_client = str(client).strip().strip('[]"\'')
-            if cleaned_client:
-                cleaned_clients.append(cleaned_client)
-
-        errors = []
-        if not company_name:
-            errors.append('companyName is required')
-        if not experience:
-            errors.append('experienceDetails is required')
-        if not cleaned_clients:
-            errors.append('At least one client is required')
-        if not vendor_type:
-            errors.append('vendorType is required')
-        if not vendor_category:
-            errors.append('vendorCategory is required')
-        if not contact_person:
-            errors.append('contactPerson is required')
-        if not email_id:
-            errors.append('emailId is required')
-        if not attendee:
-            errors.append('attendeeName is required')
-        if not bde:
-            errors.append('bdeName is required')
-        if not meeting_with:
-            errors.append('meetingWith is required')
-        if not msme_reg:
-            errors.append('msmeReg is required')
-        if not pan_no:
-            errors.append('panNo is required')
-        if not pf_reg:
-            errors.append('pfReg is required')
-        if not aadhaar_no:
-            errors.append('aadhaarNo is required')
-        if gst_no and not all([gst_type, gst_status, last_gstr1, gst_pending_status]):
-            errors.append('Complete GST details are required when GST No is provided')
-        if not turnover_year_1:
-            errors.append('turnoverYear1 is required')
-        if not turnover_year_2:
-            errors.append('turnoverYear2 is required')
-        if not turnover_year_3:
-            errors.append('turnoverYear3 is required')
-        if not bank_account_name:
-            errors.append('bankAccountName is required')
-        if not bank_name_address:
-            errors.append('bankNameAddress is required')
-        if not account_type:
-            errors.append('accountType is required')
-        if not account_number:
-            errors.append('accountNumber is required')
-        if not bank_proof_type:
-            errors.append('bankProofType is required')
-        if not qualification:
-            errors.append('qualification_status is required')
-
-        allowed_types = ['application/pdf', 'image/jpeg', 'image/png']
-        max_size = 5 * 1024 * 1024
-        for key in ['bankProofFile']:
-            f = request.FILES.get(key)
-            if f:
-                if f.size > max_size:
-                    errors.append(f'{key} exceeds max size 5MB')
-                if getattr(f, 'content_type', '') not in allowed_types:
-                    errors.append(f'{key} invalid file type')
-        if 'bankProofFile' not in request.FILES:
-            errors.append('bankProofFile is required')
-
+        cleaned_data, errors = _validate_vendor_payload(request.POST, request.FILES, require_file=True)
         if errors:
             return JsonResponse({'error': errors}, status=400)
 
-        vendor = Vendor(
-            company_name=company_name,
-            experience_details=experience,
-            address=address,
-            address2=address2,
-            city=city,
-            state=state,
-            pin_code=pin,
-            country=country,
-            vendor_type=vendor_type,
-            vendor_category=vendor_category,
-            contact_person=contact_person,
-            email_id=email_id,
-            attendee_name=attendee,
-            bde_name=bde,
-            meeting_with=meeting_with,
-            qualification_status=qualification,
-            msme_reg=msme_reg,
-            pan_no=pan_no,
-            pf_reg=pf_reg,
-            gst_no=gst_no,
-            gst_type=gst_type,
-            gst_status=gst_status,
-            last_gstr1=last_gstr1,
-            gst_pending_status=gst_pending_status,
-            aadhaar_no=aadhaar_no,
-            labour_welfare_fund=labour_welfare_fund,
-            professional_tax=professional_tax,
-            turnover_year_1=turnover_year_1,
-            turnover_year_2=turnover_year_2,
-            turnover_year_3=turnover_year_3,
-            bank_account_name=bank_account_name,
-            bank_name_address=bank_name_address,
-            account_type=account_type,
-            account_number=account_number,
-            bank_proof_type=bank_proof_type,
-            client_list_data=json.dumps(cleaned_clients),
-        )
+        vendor = Vendor(**cleaned_data)
         vendor.save()
 
         if 'bankProofFile' in request.FILES:
             vendor.passbook_file = request.FILES['bankProofFile']
-        vendor.save()
+            vendor.save()
 
         return JsonResponse({'vendor_id': vendor.vendor_id})
     except Exception as e:
+        traceback.print_exc()
+        return JsonResponse({'error': 'server error'}, status=500)
+
+
+def update_vendor(request, vendor_id):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    try:
+        try:
+            vendor = Vendor.objects.get(vendor_id=vendor_id)
+        except Vendor.DoesNotExist:
+            return JsonResponse({'error': 'Vendor not found'}, status=404)
+
+        cleaned_data, errors = _validate_vendor_payload(request.POST, request.FILES, require_file=False)
+        if errors:
+            return JsonResponse({'error': errors}, status=400)
+
+        for field_name, value in cleaned_data.items():
+            setattr(vendor, field_name, value)
+
+        if 'bankProofFile' in request.FILES:
+            vendor.passbook_file = request.FILES['bankProofFile']
+
+        vendor.save()
+
+        return JsonResponse({
+            'message': 'Vendor details updated successfully',
+            'vendor': _serialize_vendor_detail(vendor),
+        })
+    except Exception:
         traceback.print_exc()
         return JsonResponse({'error': 'server error'}, status=500)
 
@@ -910,3 +1182,8 @@ def media_blob_proxy(request, blob_path):
         return build_blob_download_response(blob_path)
     except Exception as exc:
         raise Http404('File not found.') from exc
+
+
+def sign_out(request):
+    logout(request)
+    return redirect('/admin/login/')

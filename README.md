@@ -10,6 +10,8 @@ This repository is now prepared for:
 - WhiteNoise static file serving
 - Gunicorn-based deployment
 
+It also includes a separate standalone vendor-facing application under [vendor_portal_site](C:/Users/lenovo/Desktop/slack/OmegaERP/vendor_portal_site) that talks to OmegaERP only through API endpoints. Vendors do not use the internal ERP UI.
+
 ## Stack
 
 - Python 3.14+
@@ -57,6 +59,16 @@ Required keys:
 - `OPENAI_API_KEY`
 - `THIRD_PARTY_API_KEY`
 - `BLOB_READ_WRITE_TOKEN`
+- `ERP_API_BASE_URL`
+- `VENDOR_PORTAL_SECRET_KEY`
+- `VENDOR_PORTAL_DEBUG`
+- `VENDOR_PORTAL_ALLOWED_HOSTS`
+- `VENDOR_PORTAL_BRAND_NAME`
+- `VENDOR_PORTAL_APP_SUBTITLE`
+- `VENDOR_PORTAL_SUPPORT_EMAIL`
+- `VENDOR_PORTAL_PUBLIC_URL`
+- `VENDOR_PORTAL_PRIMARY_COLOR`
+- `VENDOR_PORTAL_REFRESH_THRESHOLD_SECONDS`
 
 Example PostgreSQL URL:
 
@@ -109,6 +121,65 @@ python manage.py migrate --fake-initial
 ```bash
 python manage.py runserver
 ```
+
+## Standalone Vendor Portal
+
+The vendor-facing site is a separate Django app in [vendor_portal_site](C:/Users/lenovo/Desktop/slack/OmegaERP/vendor_portal_site). It is isolated from internal ERP navigation and uses the ERP only as an API backend.
+
+### Architecture
+
+- Internal ERP: `http://127.0.0.1:8000/`
+- Vendor portal API base: `http://127.0.0.1:8000/api/vendor-portal/`
+- Internal vendor review/control: `http://127.0.0.1:8000/vendor-portal-control/`
+- Standalone vendor portal UI: `http://127.0.0.1:8001/login/`
+
+### Standalone Portal Environment
+
+The standalone portal reads configuration from the root `.env` file and uses these keys:
+
+```env
+ERP_API_BASE_URL=http://127.0.0.1:8000/api/vendor-portal
+VENDOR_PORTAL_SECRET_KEY=replace-with-a-separate-secret
+VENDOR_PORTAL_DEBUG=True
+VENDOR_PORTAL_ALLOWED_HOSTS=127.0.0.1,localhost
+VENDOR_PORTAL_BRAND_NAME=Omega Vendor Portal
+VENDOR_PORTAL_APP_SUBTITLE=Standalone field reporting
+VENDOR_PORTAL_SUPPORT_EMAIL=support@example.com
+VENDOR_PORTAL_PUBLIC_URL=http://127.0.0.1:8001
+VENDOR_PORTAL_PRIMARY_COLOR=#0d5cab
+VENDOR_PORTAL_REFRESH_THRESHOLD_SECONDS=1800
+```
+
+### Run the Standalone Portal Locally
+
+Start the main ERP first:
+
+```bash
+python manage.py runserver 127.0.0.1:8000
+```
+
+Then start the standalone vendor portal in a second terminal:
+
+```bash
+cd vendor_portal_site
+..\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8001 --settings=config.settings
+```
+
+### What the Standalone Portal Does
+
+- separate vendor login and session
+- vendor-only dashboard and project list
+- daily progress submission via ERP API
+- media, document, and issue upload views
+- token refresh against the ERP API when the current session nears expiry
+
+### What Vendors Cannot Access
+
+- internal ERP modules
+- purchase order and accounts pages
+- internal staff data
+- other vendors' projects or uploads
+- settings and administration pages from the ERP UI
 
 ## Production Deployment
 

@@ -13,6 +13,7 @@ class Vendor(models.Model):
     VENDOR_PREFIX = 'VPF'
 
     company_name = models.CharField(max_length=200)
+    vendor_name = models.CharField(max_length=200, blank=True)
     experience_details = models.TextField(blank=True)
     address = models.TextField(blank=True)
     address2 = models.CharField(max_length=200, blank=True)
@@ -24,6 +25,7 @@ class Vendor(models.Model):
     vendor_type = models.CharField(max_length=100, blank=True)
     vendor_category = models.CharField(max_length=100, blank=True)
     contact_person = models.CharField(max_length=100, blank=True)
+    mobile_number = models.CharField(max_length=20, blank=True)
     email_id = models.EmailField(blank=True)
     attendee_name = models.CharField(max_length=200, blank=True)
     bde_name = models.CharField(max_length=200, blank=True)
@@ -47,9 +49,11 @@ class Vendor(models.Model):
     bank_name_address = models.TextField(blank=True)
     account_type = models.CharField(max_length=50, blank=True)
     account_number = models.CharField(max_length=30, blank=True)
+    bank_details = models.TextField(blank=True)
     bank_proof_type = models.CharField(max_length=50, blank=True)
     passbook_file = models.FileField(upload_to='vendor_docs/', blank=True, null=True)
     client_list_data = models.TextField(blank=True)
+    status = models.CharField(max_length=30, blank=True, default='active')
 
     vendor_id = models.CharField(max_length=50, unique=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -144,6 +148,10 @@ class ProjectWorkAllocation(models.Model):
     work_package = models.ForeignKey(WorkPackage, on_delete=models.SET_NULL, null=True, blank=True)
     vendor = models.ForeignKey(Vendor, on_delete=models.SET_NULL, null=True, blank=True)
     allocated_mw = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    completed_mw = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True, default=0)
+    timeline_start_date = models.DateField(null=True, blank=True)
+    timeline_end_date = models.DateField(null=True, blank=True)
+    actual_completion_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=50, blank=True)
     scope_note = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

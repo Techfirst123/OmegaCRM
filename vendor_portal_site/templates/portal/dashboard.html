@@ -1,0 +1,64 @@
+{% extends "portal/base.html" %}
+
+{% block content %}
+<section class="hero-panel">
+    <div>
+        <p class="hero-kicker">Field Reporting</p>
+        <h2 class="hero-title">Report actual site execution without entering OmegaERP.</h2>
+        <p class="hero-copy">This standalone portal only uses secure APIs for your assigned projects, updates, media, documents, and issues.</p>
+    </div>
+    <div class="hero-metrics">
+        <div class="metric-chip"><span>Assigned Projects</span><strong>{{ dashboard_payload.stats.assigned_projects }}</strong></div>
+        <div class="metric-chip"><span>Pending Updates</span><strong>{{ dashboard_payload.stats.pending_updates }}</strong></div>
+        <div class="metric-chip"><span>Approved Updates</span><strong>{{ dashboard_payload.stats.approved_updates }}</strong></div>
+        <div class="metric-chip"><span>Today's Progress</span><strong>{{ dashboard_payload.stats.today_progress }}</strong></div>
+        <div class="metric-chip"><span>Open Issues</span><strong>{{ dashboard_payload.stats.open_issues }}</strong></div>
+        <div class="metric-chip"><span>Completion %</span><strong>{{ dashboard_payload.stats.work_completion_percentage }}%</strong></div>
+    </div>
+</section>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-6">
+        <section class="surface-panel h-100">
+            <div class="section-heading"><h3 class="section-title">Assigned Sites</h3></div>
+            <div class="stack-list">
+                {% for row in dashboard_payload.assignments %}
+                <div class="stack-item stack-item-block">
+                    <div>
+                        <strong>{{ row.project_name }}</strong>
+                        <p class="mb-1">{{ row.site_name|default:row.project_name }} | {{ row.work_type|default:"Scope not set" }}</p>
+                        <div class="small text-muted">{{ row.location|default:"-" }}</div>
+                    </div>
+                    <span class="status-pill qualified">{{ row.progress_percentage|floatformat:2 }}%</span>
+                </div>
+                {% empty %}
+                <p class="empty-state mb-0">No site assignment available.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+    <div class="col-lg-6">
+        <section class="surface-panel h-100">
+            <div class="section-heading"><h3 class="section-title">Recent Progress Updates</h3></div>
+            <div class="table-responsive">
+                <table class="table procurement-table align-middle">
+                    <thead><tr><th>Date</th><th>Project</th><th>Work</th><th>Qty</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for row in dashboard_payload.recent_updates %}
+                        <tr>
+                            <td>{{ row.update_date }}</td>
+                            <td>{{ row.project_name }}</td>
+                            <td>{{ row.work_category }}</td>
+                            <td>{{ row.quantity_completed|default:"-" }} {{ row.unit }}</td>
+                            <td>{{ row.status_label }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center py-4 text-muted">No updates submitted yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xl-5">
+        <section class="surface-panel form-shell">
+            <div class="section-heading">
+                <h3 class="section-title">Profile Settings</h3>
+                <p class="section-copy">Update your employee details, profile photo, and personal information.</p>
+            </div>
+            <form method="post" enctype="multipart/form-data" class="d-grid gap-3">
+                {% csrf_token %}
+                {% for field in profile_form %}
+                <div>
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors|join:", " }}</div>{% endif %}
+                </div>
+                {% endfor %}
+                <button type="submit" class="btn btn-primary">Save Profile</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-xl-7">
+        <section class="surface-panel mb-4">
+            <div class="section-heading">
+                <h3 class="section-title">Profile Overview</h3>
+            </div>
+            <div class="prototype-report">
+                <div class="prototype-report-section">
+                    <div class="prototype-report-rows">
+                        <div class="prototype-report-row"><div class="prototype-report-label">Assigned Role</div><div class="prototype-report-value">{{ profile_record.get_role_display }}</div></div>
+                        <div class="prototype-report-row"><div class="prototype-report-label">Employee ID</div><div class="prototype-report-value">{{ profile_record.employee_id }}</div></div>
+                        <div class="prototype-report-row"><div class="prototype-report-label">Department</div><div class="prototype-report-value">{{ profile_record.department|default:"-" }}</div></div>
+                        <div class="prototype-report-row"><div class="prototype-report-label">Designation</div><div class="prototype-report-value">{{ profile_record.designation|default:"-" }}</div></div>
+                        <div class="prototype-report-row"><div class="prototype-report-label">Date of Joining</div><div class="prototype-report-value">{{ profile_record.date_of_joining|date:"d M Y"|default:"-" }}</div></div>
+                        <div class="prototype-report-row"><div class="prototype-report-label">Bio</div><div class="prototype-report-value">{{ profile_record.bio|default:"-" }}</div></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="surface-panel mb-4">
+            <div class="section-heading">
+                <h3 class="section-title">Assigned Vendors</h3>
+            </div>
+            <div class="stack-list">
+                {% for row in assigned_vendors %}
+                <div class="stack-item stack-item-block">
+                    <div>
+                        <strong>{{ row.vendor.company_name }} ({{ row.vendor.vendor_id }})</strong>
+                        <p class="mb-0">{{ row.get_assignment_role_display }} | {{ row.get_assignment_status_display }}</p>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="empty-state mb-0">No vendor assignments on record.</p>
+                {% endfor %}
+            </div>
+        </section>
+        <section class="surface-panel">
+            <div class="section-heading">
+                <h3 class="section-title">Assigned Projects & Login History</h3>
+            </div>
+            <div class="table-responsive mb-3">
+                <table class="table procurement-table align-middle">
+                    <thead><tr><th>Project</th><th>Code</th><th>Location</th></tr></thead>
+                    <tbody>
+                        {% for row in assigned_projects %}
+                        <tr><td>{{ row.project_name }}</td><td>{{ row.project_code }}</td><td>{{ row.project_location|default:"-" }}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted py-4">No projects mapped yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="stack-list">
+                {% for row in login_history %}
+                <div class="stack-item"><span>{{ row.ip_address|default:"Unknown IP" }}</span><span>{{ row.logged_in_at|date:"d M Y, h:i A" }}</span></div>
+                {% empty %}
+                <p class="empty-state mb-0">No login history yet.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+

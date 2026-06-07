@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ page_title|default:"OmegaERP" }} - OmegaERP</title>
+    <title>{{ page_title|default:"OmegaERP ADMIN PANEL" }} - OmegaERP ADMIN PANEL</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
     <link href="{% static 'css/custom.css' %}?v={% now "U" %}" rel="stylesheet">
 </head>
@@ -19,23 +19,106 @@
             </div>
             <nav class="nav flex-column mt-4 gap-2">
                 <a class="nav-link app-nav-link {% if request.path == '/' %}active{% endif %}" href="{% url 'index' %}">Dashboard</a>
+                <a class="nav-link app-nav-link {% if '/procurement/' in request.path %}active{% endif %}" href="{% url 'procurement-dashboard' %}">PO Tracking</a>
                 <a class="nav-link app-nav-link {% if '/projects/' in request.path %}active{% endif %}" href="{% url 'project-module' %}">Project Module</a>
                 <a class="nav-link app-nav-link {% if '/vendors/' in request.path %}active{% endif %}" href="{% url 'vendor-module' %}">Vendor Module</a>
+                <a class="nav-link app-nav-link {% if '/vendor-control/' in request.path %}active{% endif %}" href="{% url 'vendor-auth-dashboard' %}">Vendor Authorization</a>
                 <a class="nav-link app-nav-link {% if '/materials/' in request.path %}active{% endif %}" href="{% url 'material-module' %}">Material Master</a>
             </nav>
+            <div class="mt-4">
+                {% if request.user.is_authenticated %}
+                <div class="small text-muted mb-2">
+                    <div>{{ request.user.username }}</div>
+                    {% if assignment_role_label %}<div>{{ assignment_role_label }}</div>{% endif %}
+                </div>
+                {% else %}
+                <a class="nav-link app-nav-link" href="/admin/login/">Sign In</a>
+                {% endif %}
+            </div>
         </aside>
         <main class="content-panel">
             <header class="page-header">
                 <div>
-                    <p class="page-eyebrow mb-1">OmegaERP</p>
+                    <p class="page-eyebrow mb-1">OmegaERP ADMIN PANEL</p>
                     <h1 class="page-title mb-0">{{ page_title|default:"Workspace" }}</h1>
                 </div>
+                <div class="dropdown page-header-actions">
+                    <button class="btn btn-outline-primary dropdown-toggle {% if '/administration/' in request.path %}active{% endif %}" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Settings & Administration
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{% url 'administration-dashboard' %}">Open Settings</a></li>
+                        {% if request.user.is_authenticated %}
+                        <li><a class="dropdown-item" href="{% url 'administration-my-profile' %}">My Profile</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="{% url 'sign-out' %}">Sign Out</a></li>
+                        {% else %}
+                        <li><a class="dropdown-item" href="/admin/login/">Sign In</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
             </header>
+            {% if messages %}
+            <div class="mb-4">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }} mb-2">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
             {% if vendor_module_nav %}
             <nav class="module-subnav mb-4">
                 <a class="module-subnav-link {% if request.path == '/vendors/' %}active{% endif %}" href="{% url 'vendor-module' %}">Overview</a>
                 <a class="module-subnav-link {% if request.path == '/vendors/list/' %}active{% endif %}" href="{% url 'vendor-list' %}">Vendor List</a>
                 <a class="module-subnav-link {% if request.path == '/vendors/registration/' %}active{% endif %}" href="{% url 'vendor-registration' %}">Vendor Registration</a>
+            </nav>
+            {% endif %}
+            {% if vendor_authorization_nav %}
+            <nav class="module-subnav mb-4 flex-wrap">
+                <a class="module-subnav-link {% if request.path == '/vendor-control/' %}active{% endif %}" href="{% url 'vendor-auth-dashboard' %}">Overview</a>
+                {% if is_assignment_admin %}
+                <a class="module-subnav-link {% if request.path == '/vendor-control/staff/' %}active{% endif %}" href="{% url 'vendor-auth-staff-master' %}">Staff Master</a>
+                <a class="module-subnav-link {% if request.path == '/vendor-control/assignments/' %}active{% endif %}" href="{% url 'vendor-auth-assignments' %}">Assignments</a>
+                <a class="module-subnav-link {% if request.path == '/vendor-control/assignments/bulk/' %}active{% endif %}" href="{% url 'vendor-auth-bulk-assignment' %}">Bulk Assignment</a>
+                <a class="module-subnav-link {% if request.path == '/vendor-control/distribution/' %}active{% endif %}" href="{% url 'vendor-auth-distribution' %}">Distribution</a>
+                <a class="module-subnav-link {% if request.path == '/vendor-control/history/' %}active{% endif %}" href="{% url 'vendor-auth-history' %}">History</a>
+                <a class="module-subnav-link {% if request.path == '/vendor-control/performance/' %}active{% endif %}" href="{% url 'vendor-auth-performance' %}">Performance</a>
+                {% endif %}
+                <a class="module-subnav-link {% if request.path == '/vendor-control/my-vendors/' %}active{% endif %}" href="{% url 'vendor-auth-my-vendors' %}">{% if is_assignment_admin %}All Scoped Vendors{% else %}My Vendors{% endif %}</a>
+                <a class="module-subnav-link {% if request.path == '/vendor-control/tasks/' %}active{% endif %}" href="{% url 'vendor-auth-tasks' %}">{% if is_assignment_admin %}All Tasks{% else %}My Tasks{% endif %}</a>
+                <a class="module-subnav-link {% if request.path == '/vendor-control/followups/' %}active{% endif %}" href="{% url 'vendor-auth-followups' %}">Follow-ups</a>
+            </nav>
+            {% endif %}
+            {% if administration_nav %}
+            <nav class="module-subnav mb-4 flex-wrap">
+                <a class="module-subnav-link {% if request.path == '/administration/' %}active{% endif %}" href="{% url 'administration-dashboard' %}">Overview</a>
+                <a class="module-subnav-link {% if request.path == '/administration/profile/' %}active{% endif %}" href="{% url 'administration-my-profile' %}">My Profile</a>
+                <a class="module-subnav-link {% if request.path == '/administration/account-security/' %}active{% endif %}" href="{% url 'administration-account-security' %}">Account & Security</a>
+                <a class="module-subnav-link {% if request.path == '/administration/notifications/' %}active{% endif %}" href="{% url 'administration-notifications' %}">Notifications</a>
+                <a class="module-subnav-link {% if request.path == '/administration/preferences/' %}active{% endif %}" href="{% url 'administration-preferences' %}">Preferences</a>
+                {% if is_assignment_admin %}
+                <a class="module-subnav-link {% if request.path == '/administration/company/' %}active{% endif %}" href="{% url 'administration-company-settings' %}">Company</a>
+                <a class="module-subnav-link {% if request.path == '/administration/erp-configuration/' %}active{% endif %}" href="{% url 'administration-erp-configuration' %}">ERP Config</a>
+                <a class="module-subnav-link {% if request.path == '/administration/users-roles/' %}active{% endif %}" href="{% url 'administration-users-roles' %}">Users & Roles</a>
+                <a class="module-subnav-link {% if request.path == '/administration/permissions/' %}active{% endif %}" href="{% url 'administration-permissions' %}">Permissions</a>
+                <a class="module-subnav-link {% if request.path == '/administration/email/' %}active{% endif %}" href="{% url 'administration-email-settings' %}">Email</a>
+                <a class="module-subnav-link {% if request.path == '/administration/whatsapp/' %}active{% endif %}" href="{% url 'administration-whatsapp-settings' %}">WhatsApp</a>
+                <a class="module-subnav-link {% if request.path == '/administration/audit-logs/' %}active{% endif %}" href="{% url 'administration-audit-logs' %}">Audit Logs</a>
+                <a class="module-subnav-link {% if request.path == '/administration/backup-restore/' %}active{% endif %}" href="{% url 'administration-backup-restore' %}">Backup & Restore</a>
+                <a class="module-subnav-link {% if request.path == '/administration/appearance/' %}active{% endif %}" href="{% url 'administration-appearance' %}">Appearance</a>
+                <a class="module-subnav-link {% if request.path == '/administration/dashboard-settings/' %}active{% endif %}" href="{% url 'administration-dashboard-settings' %}">Dashboard</a>
+                <a class="module-subnav-link {% if request.path == '/administration/security-settings/' %}active{% endif %}" href="{% url 'administration-security-settings' %}">Security</a>
+                <a class="module-subnav-link {% if request.path == '/administration/system-health/' %}active{% endif %}" href="{% url 'administration-system-health' %}">System Health</a>
+                <a class="module-subnav-link {% if request.path == '/administration/master-data/' %}active{% endif %}" href="{% url 'administration-master-data' %}">Master Data</a>
+                {% endif %}
+                <a class="module-subnav-link {% if request.path == '/administration/help-support/' %}active{% endif %}" href="{% url 'administration-help-support' %}">Help & Support</a>
+            </nav>
+            {% endif %}
+            {% if procurement_nav %}
+            <nav class="module-subnav mb-4">
+                <a class="module-subnav-link {% if request.path == '/procurement/' %}active{% endif %}" href="{% url 'procurement-dashboard' %}">Overview</a>
+                <a class="module-subnav-link {% if request.path == '/procurement/vendors/' %}active{% endif %}" href="{% url 'procurement-vendor-master' %}">Vendor Master</a>
+                <a class="module-subnav-link {% if '/procurement/purchase-orders/' in request.path %}active{% endif %}" href="{% url 'purchase-order-master' %}">PO Master</a>
+                <a class="module-subnav-link {% if request.path == '/procurement/reports/' %}active{% endif %}" href="{% url 'procurement-reports' %}">Reports</a>
             </nav>
             {% endif %}
             {% if project_module_nav %}

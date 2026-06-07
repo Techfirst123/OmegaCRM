@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xl-4">
+        <section class="surface-panel form-shell">
+            <div class="section-heading"><h3 class="section-title">Create User</h3></div>
+            <form method="post" class="d-grid gap-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_user">
+                {% for field in managed_user_form %}
+                <div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>
+                {% endfor %}
+                {% for field in managed_staff_form %}
+                <div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>
+                {% endfor %}
+                <button type="submit" class="btn btn-primary">Create User & Profile</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-xl-8">
+        <section class="surface-panel">
+            <div class="section-heading"><h3 class="section-title">Users & Roles</h3></div>
+            <div class="table-responsive">
+                <table class="table procurement-table align-middle">
+                    <thead><tr><th>User</th><th>Employee ID</th><th>Role</th><th>Department</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        {% for row in user_rows %}
+                        <tr>
+                            <td>{{ row.user.username }}<div class="small text-muted">{{ row.email|default:row.user.email|default:"-" }}</div></td>
+                            <td>{{ row.employee_id }}</td>
+                            <td>{{ row.get_role_display }}</td>
+                            <td>{{ row.department|default:"-" }}</td>
+                            <td><span class="status-pill {% if row.is_active %}qualified{% else %}disqualified{% endif %}">{% if row.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                            <td>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="toggle_active">
+                                    <input type="hidden" name="profile_id" value="{{ row.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary">{% if row.is_active %}Disable{% else %}Enable{% endif %}</button>
+                                </form>
+                                <form method="post" class="d-inline ms-1">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="reset_password">
+                                    <input type="hidden" name="user_id" value="{{ row.user_id }}">
+                                    <input type="hidden" name="new_password" value="ChangeMe123!">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">Reset Password</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center text-muted py-4">No staff users configured yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="surface-panel">
+    <div class="section-heading">
+        <h3 class="section-title">Permission Matrix</h3>
+        <p class="section-copy">Customize module access role-by-role across view, create, edit, delete, approve, export, and assign actions.</p>
+    </div>
+    <form method="post">
+        {% csrf_token %}
+        {% for role_label, rows in permission_rows.items %}
+        <h4 class="mt-4">{{ role_label }}</h4>
+        <div class="table-responsive mb-3">
+            <table class="table procurement-table align-middle">
+                <thead><tr><th>Module</th><th>View</th><th>Create</th><th>Edit</th><th>Delete</th><th>Approve</th><th>Export</th><th>Assign</th></tr></thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>{{ row.get_module_key_display }}</td>
+                        <td><input class="form-check-input" type="checkbox" name="perm_{{ row.id }}_can_view" {% if row.can_view %}checked{% endif %}></td>
+                        <td><input class="form-check-input" type="checkbox" name="perm_{{ row.id }}_can_create" {% if row.can_create %}checked{% endif %}></td>
+                        <td><input class="form-check-input" type="checkbox" name="perm_{{ row.id }}_can_edit" {% if row.can_edit %}checked{% endif %}></td>
+                        <td><input class="form-check-input" type="checkbox" name="perm_{{ row.id }}_can_delete" {% if row.can_delete %}checked{% endif %}></td>
+                        <td><input class="form-check-input" type="checkbox" name="perm_{{ row.id }}_can_approve" {% if row.can_approve %}checked{% endif %}></td>
+                        <td><input class="form-check-input" type="checkbox" name="perm_{{ row.id }}_can_export" {% if row.can_export %}checked{% endif %}></td>
+                        <td><input class="form-check-input" type="checkbox" name="perm_{{ row.id }}_can_assign" {% if row.can_assign %}checked{% endif %}></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Save Permission Matrix</button>
+    </form>
+</section>
+{% endblock %}
+

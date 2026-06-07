@@ -66,6 +66,10 @@ function distributionRowMarkup(row = {}) {
             <td><select class="form-select form-select-sm distribution-work-package">${buildWorkPackageOptions(row.work_package_id || '')}</select></td>
             <td><select class="form-select form-select-sm distribution-vendor">${buildVendorOptions(row.vendor_id || '')}</select></td>
             <td><input class="form-control form-control-sm distribution-mw" type="number" min="0.01" step="0.01" value="${row.allocated_mw || ''}"></td>
+            <td><input class="form-control form-control-sm distribution-completed-mw" type="number" min="0" step="0.01" value="${row.completed_mw || ''}"></td>
+            <td><input class="form-control form-control-sm distribution-start-date" type="date" value="${row.timeline_start_date || ''}"></td>
+            <td><input class="form-control form-control-sm distribution-end-date" type="date" value="${row.timeline_end_date || ''}"></td>
+            <td><input class="form-control form-control-sm distribution-actual-date" type="date" value="${row.actual_completion_date || ''}"></td>
             <td>
                 <select class="form-select form-select-sm distribution-status">
                     <option value="planned"${row.status === 'planned' ? ' selected' : ''}>Planned</option>
@@ -122,11 +126,14 @@ function loadDistributionRows(projectId) {
     const projectAllocations = projectId ? (allocationMap[String(projectId)] || []) : initialAllocations;
     if (projectAllocations.length) {
         projectAllocations.forEach((row) => {
-            const workPackage = distributionWorkPackages.find((item) => item.name === row.work_package);
             addDistributionRow({
-                work_package_id: workPackage ? String(workPackage.id) : '',
+                work_package_id: row.work_package_id ? String(row.work_package_id) : '',
                 vendor_id: row.vendor_id || '',
                 allocated_mw: row.allocated_mw || '',
+                completed_mw: row.completed_mw || '',
+                timeline_start_date: row.timeline_start_date || '',
+                timeline_end_date: row.timeline_end_date || '',
+                actual_completion_date: row.actual_completion_date || '',
                 status: row.status || 'planned',
                 scope_note: row.scope_note || ''
             });
@@ -147,9 +154,16 @@ async function saveDistribution() {
         workPackageId: row.querySelector('.distribution-work-package')?.value || '',
         vendorId: row.querySelector('.distribution-vendor')?.value || '',
         allocatedMw: row.querySelector('.distribution-mw')?.value || '',
+        completedMw: row.querySelector('.distribution-completed-mw')?.value || '',
+        timelineStartDate: row.querySelector('.distribution-start-date')?.value || '',
+        timelineEndDate: row.querySelector('.distribution-end-date')?.value || '',
+        actualCompletionDate: row.querySelector('.distribution-actual-date')?.value || '',
         status: row.querySelector('.distribution-status')?.value || '',
         scopeNote: row.querySelector('.distribution-scope-note')?.value || ''
-    })).filter((row) => row.workPackageId || row.vendorId || row.allocatedMw || row.scopeNote);
+    })).filter((row) => (
+        row.workPackageId || row.vendorId || row.allocatedMw || row.completedMw
+        || row.timelineStartDate || row.timelineEndDate || row.actualCompletionDate || row.scopeNote
+    ));
 
     try {
         const response = await fetch(PROJECT_DISTRIBUTION_SAVE_URL, {

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="surface-panel form-shell">
+    <div class="section-heading">
+        <h3 class="section-title">Appearance Settings</h3>
+        <p class="section-copy">Update logos, banners, favicon, brand colors, and custom CSS for the ERP shell.</p>
+    </div>
+    <form method="post" enctype="multipart/form-data" class="d-grid gap-3">
+        {% csrf_token %}
+        {% for field in appearance_form %}
+        <div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Save Appearance</button>
+    </form>
+</section>
+{% endblock %}
+

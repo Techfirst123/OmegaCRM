@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-xl-4">
+        <section class="surface-panel form-shell mb-4">
+            <div class="section-heading"><h3 class="section-title">Change Password</h3></div>
+            <form method="post" class="d-grid gap-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="change_password">
+                {% for field in password_form %}
+                <div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small mt-1">{{ field.errors|join:", " }}</div>{% endif %}</div>
+                {% endfor %}
+                <button type="submit" class="btn btn-primary">Update Password</button>
+            </form>
+        </section>
+        <section class="surface-panel form-shell">
+            <div class="section-heading"><h3 class="section-title">Email & Mobile</h3></div>
+            <form method="post" class="d-grid gap-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_contact">
+                {% for field in contact_form %}
+                <div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>
+                {% endfor %}
+                <button type="submit" class="btn btn-outline-primary">Save Contact Settings</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-xl-4">
+        <section class="surface-panel form-shell h-100">
+            <div class="section-heading"><h3 class="section-title">Security Controls</h3></div>
+            <form method="post" class="d-grid gap-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="security_preferences">
+                {% for field in security_form %}
+                <div><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>
+                {% endfor %}
+                <button type="submit" class="btn btn-primary">Save Security Preferences</button>
+            </form>
+        </section>
+    </div>
+    <div class="col-xl-4">
+        <section class="surface-panel mb-4">
+            <div class="section-heading"><h3 class="section-title">Active Sessions</h3></div>
+            <div class="stack-list mb-3">
+                {% for row in session_rows %}
+                <div class="stack-item stack-item-block">
+                    <div>
+                        <strong>{{ row.ip_address|default:"Unknown IP" }}</strong>
+                        <p class="mb-1">{{ row.user_agent|truncatechars:70|default:"-" }}</p>
+                        <div class="small text-muted">{{ row.logged_in_at|date:"d M Y, h:i A" }}</div>
+                        {% if row.session_key == current_session_key %}
+                        <div class="small text-primary mt-1">Current session</div>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex flex-column align-items-end gap-2">
+                        <span class="status-pill {% if row.is_active %}qualified{% else %}disqualified{% endif %}">{% if row.is_active %}Active{% else %}Closed{% endif %}</span>
+                        {% if row.is_active %}
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="logout_session">
+                            <input type="hidden" name="session_key" value="{{ row.session_key }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Sign Out</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <p class="empty-state mb-0">No session records available.</p>
+                {% endfor %}
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="logout_all_devices">
+                <button type="submit" class="btn btn-outline-danger">Logout All Devices</button>
+            </form>
+        </section>
+        <section class="surface-panel">
+            <div class="section-heading"><h3 class="section-title">Login Attempts</h3></div>
+            <div class="stack-list">
+                {% for row in login_attempts %}
+                <div class="stack-item"><span>{{ row.ip_address|default:"Unknown IP" }}</span><span>{% if row.success %}Success{% else %}Failed{% endif %} | {{ row.attempted_at|date:"d M Y, h:i A" }}</span></div>
+                {% empty %}
+                <p class="empty-state mb-0">No login attempts logged yet.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

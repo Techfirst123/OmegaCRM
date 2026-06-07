@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 env = environ.Env(
     DEBUG=(bool, False),
     SECRET_KEY=(str, 'unsafe-development-secret-key'),
-    ALLOWED_HOSTS=(list, ['127.0.0.1', 'localhost']),
+    ALLOWED_HOSTS=(list, ['127.0.0.1', 'localhost', 'testserver']),
     CSRF_TRUSTED_ORIGINS=(list, []),
     EMAIL_PORT=(int, 587),
     EMAIL_USE_TLS=(bool, True),
@@ -18,7 +18,7 @@ environ.Env.read_env(BASE_DIR / '.env')
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env.bool('DEBUG', default=False)
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['127.0.0.1', 'localhost', 'testserver'])
 CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
 
 INSTALLED_APPS = [
@@ -28,7 +28,21 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'accounts',
+    'administration',
     'core',
+    'vendors',
+    'tasks',
+    'permissions',
+    'notifications',
+    'audit_logs',
+    'purchase_orders',
+    'deliveries',
+    'transport',
+    'payments',
+    'documents',
+    'reports',
+    'vendor_portal',
 ]
 
 MIDDLEWARE = [
@@ -38,6 +52,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'administration.middleware.SessionActivityMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
