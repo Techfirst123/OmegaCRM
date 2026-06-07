@@ -7,6 +7,7 @@
             <div class="section-heading">
                 <h3 class="section-title">Create Vendor Portal User</h3>
                 <p class="section-copy">Provision separate portal credentials without exposing internal ERP modules.</p>
+                <p class="section-copy mb-0">Only vendors with an active project/work allocation in OmegaERP can receive portal access. Available vendors: <strong>{{ assignable_vendor_count }}</strong></p>
             </div>
             <form method="post" class="d-grid gap-3">
                 {% csrf_token %}

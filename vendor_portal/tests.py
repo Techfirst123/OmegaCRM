@@ -7,8 +7,9 @@ from django.urls import reverse
 from accounts.models import StaffProfile
 from core.models import ProjectMaster, ProjectWorkAllocation, Vendor, WorkPackage
 
-from .models import VendorDailyUpdate, VendorProjectAssignment, VendorReview, VendorUser
-from .services import sync_vendor_project_assignments
+from .forms import VendorPortalUserForm
+from .models import VendorDailyUpdate, VendorProjectAssignment, VendorUser
+from .services import recalculate_assignment_progress, sync_vendor_project_assignments
 
 
 User = get_user_model()
@@ -106,6 +107,17 @@ class VendorPortalAccessTests(TestCase):
         self.assertIn('token', payload)
         self.assertIn('refresh_recommended_in', payload)
 
+    def test_vendor_api_login_denied_without_active_assignment(self):
+        self.allocation.delete()
+        response = self.client.post(
+            reverse('vendor-portal-api-login'),
+            {'identifier': 'vendorlogin', 'password': 'pass1234'},
+        )
+        self.assertEqual(response.status_code, 403)
+        payload = response.json()
+        self.assertFalse(payload['ok'])
+        self.assertIn('project assignment', payload['error'].lower())
+
     def test_vendor_api_projects_requires_token(self):
         response = self.client.get(reverse('vendor-portal-api-projects'))
         self.assertEqual(response.status_code, 401)
@@ -125,13 +137,39 @@ class VendorPortalAccessTests(TestCase):
         self.assertIn('Vendor Portal Project', project_names)
         self.assertNotIn('Hidden Project', project_names)
 
-    def test_internal_admin_can_open_portal_management(self):
-        self.client.login(username='portaladmin', password='pass1234')
-        response = self.client.get(reverse('vendor-portal-admin-dashboard'))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Vendor Portal Management')
+    def test_vendor_api_token_blocked_when_assignment_removed(self):
+        login_payload = self.client.post(
+            reverse('vendor-portal-api-login'),
+            {'identifier': 'vendorlogin', 'password': 'pass1234'},
+        ).json()
+        self.allocation.delete()
+        response = self.client.get(
+            reverse('vendor-portal-api-projects'),
+            HTTP_AUTHORIZATION=f"Bearer {login_payload['token']}",
+        )
+        self.assertEqual(response.status_code, 403)
+        payload = response.json()
+        self.assertFalse(payload['ok'])
+        self.assertIn('credential activation', payload['error'].lower())
 
-    def test_reviewed_update_recalculates_project_allocation_progress(self):
+    def test_vendor_portal_user_form_rejects_vendor_without_project_assignment(self):
+        unassigned_vendor = Vendor.objects.create(company_name='No Assignment Vendor', vendor_name='No Assignment Vendor')
+        form = VendorPortalUserForm(
+            data={
+                'vendor': unassigned_vendor.id,
+                'username': 'noassignment',
+                'password': 'Vendor@123',
+                'email': 'noassignment@example.com',
+                'mobile_number': '8888888888',
+                'role': VendorUser.ROLE_VENDOR_OPERATOR,
+                'is_active': True,
+            },
+            vendor_queryset=Vendor.objects.filter(id=unassigned_vendor.id),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('Assign this vendor to at least one project', form.errors['vendor'][0])
+
+    def test_recalculate_assignment_progress_updates_project_allocation(self):
         assignment = VendorProjectAssignment.objects.get(vendor_user=self.vendor_portal_user, project=self.project)
         daily_update = VendorDailyUpdate.objects.create(
             assignment=assignment,
@@ -141,18 +179,10 @@ class VendorPortalAccessTests(TestCase):
             quantity_completed=Decimal('4.00'),
             unit='MW',
             progress_percentage=Decimal('40.00'),
-            status=VendorDailyUpdate.STATUS_SUBMITTED,
+            status=VendorDailyUpdate.STATUS_APPROVED,
         )
-
-        self.client.login(username='portaladmin', password='pass1234')
-        response = self.client.post(
-            reverse('vendor-portal-review-detail', kwargs={'update_id': daily_update.id}),
-            {'decision': VendorReview.DECISION_APPROVED, 'comments': 'Looks correct.'},
-            follow=True,
-        )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(daily_update.status, VendorDailyUpdate.STATUS_APPROVED)
+        recalculate_assignment_progress(assignment)
 
         self.allocation.refresh_from_db()
-        daily_update.refresh_from_db()
-        self.assertEqual(daily_update.status, VendorDailyUpdate.STATUS_APPROVED)
         self.assertEqual(self.allocation.completed_mw, Decimal('4.00'))

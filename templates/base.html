@@ -80,6 +80,7 @@
                 <a class="module-subnav-link {% if request.path == '/vendor-control/assignments/' %}active{% endif %}" href="{% url 'vendor-auth-assignments' %}">Assignments</a>
                 <a class="module-subnav-link {% if request.path == '/vendor-control/assignments/bulk/' %}active{% endif %}" href="{% url 'vendor-auth-bulk-assignment' %}">Bulk Assignment</a>
                 <a class="module-subnav-link {% if request.path == '/vendor-control/distribution/' %}active{% endif %}" href="{% url 'vendor-auth-distribution' %}">Distribution</a>
+                <a class="module-subnav-link {% if request.path == '/vendor-control/portal-access/' %}active{% endif %}" href="{% url 'vendor-auth-portal-access' %}">Portal Access</a>
                 <a class="module-subnav-link {% if request.path == '/vendor-control/history/' %}active{% endif %}" href="{% url 'vendor-auth-history' %}">History</a>
                 <a class="module-subnav-link {% if request.path == '/vendor-control/performance/' %}active{% endif %}" href="{% url 'vendor-auth-performance' %}">Performance</a>
                 {% endif %}

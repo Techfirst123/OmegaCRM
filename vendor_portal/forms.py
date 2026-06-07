@@ -12,6 +12,7 @@ from .models import (
     VendorUser,
     VendorReview,
 )
+from .services import vendor_has_project_allocations
 
 User = get_user_model()
 
@@ -63,6 +64,14 @@ class VendorPortalUserForm(forms.Form):
         if User.objects.filter(username__iexact=username).exists():
             raise forms.ValidationError('This username is already in use.')
         return username
+
+    def clean_vendor(self):
+        vendor = self.cleaned_data.get('vendor')
+        if vendor and not vendor_has_project_allocations(vendor):
+            raise forms.ValidationError(
+                'Assign this vendor to at least one project in OmegaERP before generating vendor portal access.'
+            )
+        return vendor
 
 
 class VendorDailyUpdateForm(BootstrapModelForm):

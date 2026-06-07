@@ -25,6 +25,7 @@ from .services import (
     record_vendor_notification,
     record_vendor_session,
     sync_vendor_project_assignments,
+    vendor_has_active_assignment,
     vendor_dashboard_stats,
 )
 
@@ -32,6 +33,9 @@ from .services import (
 TOKEN_SALT = 'vendor-portal-api'
 TOKEN_MAX_AGE_SECONDS = 60 * 60 * 12
 TOKEN_REFRESH_WINDOW_SECONDS = 60 * 60 * 2
+PORTAL_ACCESS_REQUIRED_MESSAGE = (
+    'Vendor portal access is enabled only after project assignment and credential activation in OmegaERP.'
+)
 
 
 def _json_error(message, status=400):
@@ -213,6 +217,9 @@ def _require_vendor_api_user(request):
     vendor_user = _get_vendor_user_from_token(request)
     if not vendor_user:
         return None, _json_error('Unauthorized vendor portal token.', status=401)
+    if not vendor_has_active_assignment(vendor_user):
+        vendor_user.portal_sessions.filter(is_active=True).update(is_active=False, logged_out_at=timezone.now())
+        return None, _json_error(PORTAL_ACCESS_REQUIRED_MESSAGE, status=403)
     return vendor_user, None
 
 
@@ -240,6 +247,9 @@ def api_login(request):
         return _json_error('Invalid vendor portal credentials.', status=401)
     if not vendor_user.user.check_password(password):
         return _json_error('Invalid vendor portal credentials.', status=401)
+    if not vendor_has_active_assignment(vendor_user):
+        vendor_user.portal_sessions.filter(is_active=True).update(is_active=False, logged_out_at=timezone.now())
+        return _json_error(PORTAL_ACCESS_REQUIRED_MESSAGE, status=403)
 
     token = _issue_token(vendor_user)
     pseudo_session_key = token[-24:]

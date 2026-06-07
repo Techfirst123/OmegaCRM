@@ -102,6 +102,27 @@ def _nav_context(active_tab, **extra):
     }
 
 
+def _is_access_revoked_error(exc):
+    message = str(exc).lower()
+    return (
+        'project assignment' in message
+        or 'credential activation' in message
+        or 'unauthorized vendor portal token' in message
+        or 'invalid vendor portal credentials' in message
+    )
+
+
+def _portal_api_call(request, method, path, **kwargs):
+    try:
+        return getattr(api_client, method)(path, **kwargs)
+    except api_client.PortalApiError as exc:
+        if _is_access_revoked_error(exc):
+            request.session.flush()
+            messages.error(request, str(exc))
+            return None
+        raise
+
+
 def _ensure_fresh_token(request):
     token = _session_token(request)
     if not token:
@@ -176,9 +197,15 @@ def forgot_password_view(request):
 @portal_login_required
 def dashboard_view(request):
     token = _ensure_fresh_token(request)
-    payload = api_client.get('dashboard/', token=token)
-    media_payload = api_client.get('media/', token=token)
-    notifications_payload = api_client.get('notifications/', token=token)
+    payload = _portal_api_call(request, 'get', 'dashboard/', token=token)
+    if payload is None:
+        return redirect('portal-login')
+    media_payload = _portal_api_call(request, 'get', 'media/', token=token)
+    if media_payload is None:
+        return redirect('portal-login')
+    notifications_payload = _portal_api_call(request, 'get', 'notifications/', token=token)
+    if notifications_payload is None:
+        return redirect('portal-login')
     assignments = payload.get('assignments', [])
     stats = payload.get('stats', {})
     timeline_groups = _build_home_feed(
@@ -200,7 +227,9 @@ def dashboard_view(request):
 
 @portal_login_required
 def projects_view(request):
-    payload = api_client.get('projects/', token=_ensure_fresh_token(request), params={'q': request.GET.get('q', '')})
+    payload = _portal_api_call(request, 'get', 'projects/', token=_ensure_fresh_token(request), params={'q': request.GET.get('q', '')})
+    if payload is None:
+        return redirect('portal-login')
     return render(request, 'portal/projects.html', {
         **_portal_context(request, 'Assigned Projects'),
         **_nav_context('projects'),
@@ -214,14 +243,22 @@ def updates_view(request):
     token = _ensure_fresh_token(request)
     if request.method == 'POST':
         try:
-            api_client.post('updates/', token=token, data=request.POST)
+            payload = _portal_api_call(request, 'post', 'updates/', token=token, data=request.POST)
+            if payload is None:
+                return redirect('portal-login')
             messages.success(request, 'Daily update saved successfully.')
             return redirect('portal-updates')
         except api_client.PortalApiError as exc:
             messages.error(request, str(exc))
-    payload = api_client.get('updates/', token=token)
-    media_payload = api_client.get('media/', token=token)
-    document_payload = api_client.get('documents/', token=token)
+    payload = _portal_api_call(request, 'get', 'updates/', token=token)
+    if payload is None:
+        return redirect('portal-login')
+    media_payload = _portal_api_call(request, 'get', 'media/', token=token)
+    if media_payload is None:
+        return redirect('portal-login')
+    document_payload = _portal_api_call(request, 'get', 'documents/', token=token)
+    if document_payload is None:
+        return redirect('portal-login')
     return render(request, 'portal/updates.html', {
         **_portal_context(request, 'Upload Center'),
         **_nav_context('upload'),
@@ -238,12 +275,16 @@ def media_view(request):
     if request.method == 'POST':
         files = {'file': request.FILES['file']} if 'file' in request.FILES else {}
         try:
-            api_client.post('media/', token=token, data=request.POST, files=files)
+            payload = _portal_api_call(request, 'post', 'media/', token=token, data=request.POST, files=files)
+            if payload is None:
+                return redirect('portal-login')
             messages.success(request, 'Media uploaded successfully.')
             return redirect('portal-media')
         except api_client.PortalApiError as exc:
             messages.error(request, str(exc))
-    payload = api_client.get('media/', token=token)
+    payload = _portal_api_call(request, 'get', 'media/', token=token)
+    if payload is None:
+        return redirect('portal-login')
     image_rows = [row for row in payload.get('results', []) if row.get('media_type') == 'image']
     video_rows = [row for row in payload.get('results', []) if row.get('media_type') == 'video']
     return render(request, 'portal/media.html', {
@@ -263,12 +304,16 @@ def documents_view(request):
     if request.method == 'POST':
         files = {'file': request.FILES['file']} if 'file' in request.FILES else {}
         try:
-            api_client.post('documents/', token=token, data=request.POST, files=files)
+            payload = _portal_api_call(request, 'post', 'documents/', token=token, data=request.POST, files=files)
+            if payload is None:
+                return redirect('portal-login')
             messages.success(request, 'Document uploaded successfully.')
             return redirect('portal-documents')
         except api_client.PortalApiError as exc:
             messages.error(request, str(exc))
-    payload = api_client.get('documents/', token=token)
+    payload = _portal_api_call(request, 'get', 'documents/', token=token)
+    if payload is None:
+        return redirect('portal-login')
     return render(request, 'portal/documents.html', {
         **_portal_context(request, 'Documents'),
         **_nav_context('upload'),
@@ -285,12 +330,16 @@ def issues_view(request):
     if request.method == 'POST':
         files = {'evidence_file': request.FILES['evidence_file']} if 'evidence_file' in request.FILES else {}
         try:
-            api_client.post('issues/', token=token, data=request.POST, files=files)
+            payload = _portal_api_call(request, 'post', 'issues/', token=token, data=request.POST, files=files)
+            if payload is None:
+                return redirect('portal-login')
             messages.success(request, 'Site issue submitted successfully.')
             return redirect('portal-issues')
         except api_client.PortalApiError as exc:
             messages.error(request, str(exc))
-    payload = api_client.get('issues/', token=token)
+    payload = _portal_api_call(request, 'get', 'issues/', token=token)
+    if payload is None:
+        return redirect('portal-login')
     issue_cards = [
         {'value': value, 'label': label, 'icon': icon}
         for (value, label), icon in zip(
@@ -311,7 +360,9 @@ def issues_view(request):
 
 @portal_login_required
 def notifications_view(request):
-    payload = api_client.get('notifications/', token=_ensure_fresh_token(request))
+    payload = _portal_api_call(request, 'get', 'notifications/', token=_ensure_fresh_token(request))
+    if payload is None:
+        return redirect('portal-login')
     return render(request, 'portal/notifications.html', {
         **_portal_context(request, 'Notifications'),
         **_nav_context('profile'),
@@ -328,7 +379,9 @@ def sessions_view(request):
             'session_key': request.POST.get('session_key', ''),
         }
         try:
-            api_client.post('sessions/', token=token, data=data)
+            payload = _portal_api_call(request, 'post', 'sessions/', token=token, data=data)
+            if payload is None:
+                return redirect('portal-login')
             if data['action'] == 'signout_all' or data['session_key'] == request.session.get(SESSION_SESSION_KEY, ''):
                 request.session.flush()
                 return redirect('portal-login')
@@ -336,7 +389,9 @@ def sessions_view(request):
             return redirect('portal-sessions')
         except api_client.PortalApiError as exc:
             messages.error(request, str(exc))
-    payload = api_client.get('sessions/', token=token, params={'session_key': request.session.get(SESSION_SESSION_KEY, '')})
+    payload = _portal_api_call(request, 'get', 'sessions/', token=token, params={'session_key': request.session.get(SESSION_SESSION_KEY, '')})
+    if payload is None:
+        return redirect('portal-login')
     return render(request, 'portal/sessions.html', {
         **_portal_context(request, 'Profile & Sessions'),
         **_nav_context('profile'),
@@ -347,9 +402,15 @@ def sessions_view(request):
 @portal_login_required
 def profile_view(request):
     token = _ensure_fresh_token(request)
-    dashboard_payload = api_client.get('dashboard/', token=token)
-    sessions_payload = api_client.get('sessions/', token=token, params={'session_key': request.session.get(SESSION_SESSION_KEY, '')})
-    notifications_payload = api_client.get('notifications/', token=token)
+    dashboard_payload = _portal_api_call(request, 'get', 'dashboard/', token=token)
+    if dashboard_payload is None:
+        return redirect('portal-login')
+    sessions_payload = _portal_api_call(request, 'get', 'sessions/', token=token, params={'session_key': request.session.get(SESSION_SESSION_KEY, '')})
+    if sessions_payload is None:
+        return redirect('portal-login')
+    notifications_payload = _portal_api_call(request, 'get', 'notifications/', token=token)
+    if notifications_payload is None:
+        return redirect('portal-login')
     return render(request, 'portal/profile.html', {
         **_portal_context(request, 'Vendor Profile'),
         **_nav_context('profile'),

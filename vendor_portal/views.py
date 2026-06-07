@@ -49,6 +49,7 @@ from .services import (
     record_vendor_notification,
     record_vendor_session,
     sync_vendor_project_assignments,
+    vendor_has_active_assignment,
     vendor_dashboard_stats,
 )
 
@@ -105,6 +106,16 @@ def vendor_login(request):
         if vendor_user and vendor_user.is_active:
             user = authenticate(request, username=vendor_user.user.username, password=form.cleaned_data['password'])
             if user is not None:
+                if not vendor_has_active_assignment(vendor_user):
+                    messages.error(
+                        request,
+                        'Vendor portal access starts only after a project/site is assigned in OmegaERP and portal credentials are activated.',
+                    )
+                    return render(
+                        request,
+                        'vendor_portal/login.html',
+                        {'page_title': 'Vendor Portal Login', 'form': form, 'forgot_form': forgot_form},
+                    )
                 login(request, user)
                 vendor_user.last_login_at = timezone.now()
                 vendor_user.save(update_fields=['last_login_at', 'updated_at'])
@@ -395,7 +406,7 @@ def vendor_portal_management_dashboard(request):
 
 @require_internal_admin
 def vendor_portal_user_management(request):
-    vendor_queryset = Vendor.objects.order_by('company_name')
+    vendor_queryset = Vendor.objects.filter(projectworkallocation__isnull=False).distinct().order_by('company_name')
     user_rows = VendorUser.objects.select_related('user', 'vendor').order_by('vendor__company_name', 'user__username')
     role_filter = (request.GET.get('role') or '').strip()
     query = (request.GET.get('q') or '').strip()
@@ -467,6 +478,7 @@ def vendor_portal_user_management(request):
         **_internal_context(request, 'Vendor Portal Users'),
         'user_rows': user_rows,
         'vendor_portal_user_form': form,
+        'assignable_vendor_count': vendor_queryset.count(),
         'role_filter': role_filter,
         'query': query,
         'role_choices': VendorUser.ROLE_CHOICES,

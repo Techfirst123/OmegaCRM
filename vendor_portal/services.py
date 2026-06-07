@@ -29,13 +29,14 @@ def parse_project_location(location_text):
 
 
 def sync_vendor_project_assignments():
+    active_assignment_ids = set()
     for allocation in ProjectWorkAllocation.objects.select_related('project', 'vendor', 'work_package').filter(vendor__isnull=False):
         if not allocation.vendor:
             continue
         vendor_users = allocation.vendor.portal_users.filter(is_active=True)
         district, state, country = parse_project_location(allocation.project.project_location)
         for vendor_user in vendor_users:
-            VendorProjectAssignment.objects.update_or_create(
+            assignment, _ = VendorProjectAssignment.objects.update_or_create(
                 vendor_user=vendor_user,
                 vendor=allocation.vendor,
                 project=allocation.project,
@@ -56,6 +57,21 @@ def sync_vendor_project_assignments():
                     'is_active': True,
                 },
             )
+            active_assignment_ids.add(assignment.id)
+    stale_rows = VendorProjectAssignment.objects.filter(is_active=True)
+    if active_assignment_ids:
+        stale_rows = stale_rows.exclude(id__in=active_assignment_ids)
+    stale_rows.update(is_active=False)
+
+
+def vendor_has_project_allocations(vendor):
+    return ProjectWorkAllocation.objects.filter(vendor=vendor).exists()
+
+
+def vendor_has_active_assignment(vendor_user, *, refresh=True):
+    if refresh:
+        sync_vendor_project_assignments()
+    return vendor_user.project_assignments.filter(is_active=True).exists()
 
 
 def recalculate_assignment_progress(assignment):
