@@ -1,0 +1,92 @@
+{% extends "portal/base.html" %}
+
+{% block content %}
+<section class="portal-profile-card">
+    <div class="portal-profile-head">
+        <div class="portal-profile-avatar">{{ portal_vendor_name|default:portal_user.username|slice:":1"|upper }}</div>
+        <div class="flex-grow-1">
+            <div class="portal-profile-name">{{ portal_vendor_name|default:"Vendor User" }}</div>
+            <div class="portal-hero-copy">{{ portal_user.username }}</div>
+            <div class="portal-project-meta mt-2">
+                <span class="portal-mini-chip"><i class="bi bi-person-badge"></i>{{ portal_role_label }}</span>
+                {% if portal_user.vendor_id %}<span class="portal-mini-chip"><i class="bi bi-hash"></i>{{ portal_user.vendor_id }}</span>{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="portal-stat-grid">
+        <div class="portal-stat-card">
+            <span class="portal-stat-label">Assigned Projects</span>
+            <div class="portal-stat-value">{{ dashboard_stats.assigned_projects }}</div>
+        </div>
+        <div class="portal-stat-card is-green">
+            <span class="portal-stat-label">Approved Updates</span>
+            <div class="portal-stat-value">{{ dashboard_stats.approved_updates }}</div>
+        </div>
+        <div class="portal-stat-card is-orange">
+            <span class="portal-stat-label">Pending Reviews</span>
+            <div class="portal-stat-value">{{ dashboard_stats.pending_updates }}</div>
+        </div>
+        <div class="portal-stat-card is-dark">
+            <span class="portal-stat-label">Open Issues</span>
+            <div class="portal-stat-value">{{ dashboard_stats.open_issues }}</div>
+        </div>
+    </div>
+    <div class="d-grid gap-2">
+        <a class="btn btn-outline-primary" href="{% url 'portal-sessions' %}">Manage Sessions</a>
+        <a class="btn btn-primary" href="{% url 'portal-logout' %}">Log Out</a>
+    </div>
+</section>
+
+<div class="portal-desktop-grid two-col">
+    <section class="portal-section-card">
+        <div class="portal-section-head">
+            <div>
+                <h2 class="portal-section-title">Assigned Sites</h2>
+                <div class="portal-card-copy">Project and site access currently mapped to this vendor account.</div>
+            </div>
+        </div>
+        <div class="portal-feed-list">
+            {% for row in assignment_rows %}
+            <article class="portal-project-card">
+                <div class="portal-feed-meta">
+                    <div>
+                        <h3 class="portal-feed-title">{{ row.project_name }}</h3>
+                        <div class="portal-project-subtitle">{{ row.site_name|default:row.site_code|default:"Assigned site" }}</div>
+                    </div>
+                    <span class="portal-badge is-green">{{ row.progress_percentage|floatformat:1 }}%</span>
+                </div>
+                <div class="portal-project-meta mt-2">
+                    <span class="portal-mini-chip"><i class="bi bi-geo-alt"></i>{{ row.location|default:"Location pending" }}</span>
+                    <span class="portal-mini-chip"><i class="bi bi-tools"></i>{{ row.work_type|default:"Scope pending" }}</span>
+                </div>
+            </article>
+            {% empty %}
+            <div class="portal-empty">No assigned sites yet.</div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="portal-section-card">
+        <div class="portal-section-head">
+            <div>
+                <h2 class="portal-section-title">Recent Notifications</h2>
+                <div class="portal-card-copy">Approval comments, responses, and field alerts.</div>
+            </div>
+        </div>
+        <div class="portal-notification-list">
+            {% for row in notification_rows %}
+            <article class="portal-notification-card">
+                <div class="portal-feed-title">{{ row.title }}</div>
+                <div class="portal-feed-copy mt-1">{{ row.message }}</div>
+                <div class="portal-project-meta mt-2">
+                    <span class="portal-mini-chip"><i class="bi bi-broadcast"></i>{{ row.channel_label }}</span>
+                    <span class="portal-mini-chip"><i class="bi bi-clock"></i>{{ row.created_at|slice:":10" }}</span>
+                </div>
+            </article>
+            {% empty %}
+            <div class="portal-empty">No notifications yet.</div>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+{% endblock %}

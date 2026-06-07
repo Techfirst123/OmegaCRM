@@ -15,4 +15,5 @@ urlpatterns = [
     path('issues/', views.issues_view, name='portal-issues'),
     path('notifications/', views.notifications_view, name='portal-notifications'),
     path('sessions/', views.sessions_view, name='portal-sessions'),
+    path('profile/', views.profile_view, name='portal-profile'),
 ]

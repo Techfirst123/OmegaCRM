@@ -1,64 +1,199 @@
 {% extends "portal/base.html" %}
 
 {% block content %}
-<section class="hero-panel">
-    <div>
-        <p class="hero-kicker">Field Reporting</p>
-        <h2 class="hero-title">Report actual site execution without entering OmegaERP.</h2>
-        <p class="hero-copy">This standalone portal only uses secure APIs for your assigned projects, updates, media, documents, and issues.</p>
-    </div>
-    <div class="hero-metrics">
-        <div class="metric-chip"><span>Assigned Projects</span><strong>{{ dashboard_payload.stats.assigned_projects }}</strong></div>
-        <div class="metric-chip"><span>Pending Updates</span><strong>{{ dashboard_payload.stats.pending_updates }}</strong></div>
-        <div class="metric-chip"><span>Approved Updates</span><strong>{{ dashboard_payload.stats.approved_updates }}</strong></div>
-        <div class="metric-chip"><span>Today's Progress</span><strong>{{ dashboard_payload.stats.today_progress }}</strong></div>
-        <div class="metric-chip"><span>Open Issues</span><strong>{{ dashboard_payload.stats.open_issues }}</strong></div>
-        <div class="metric-chip"><span>Completion %</span><strong>{{ dashboard_payload.stats.work_completion_percentage }}%</strong></div>
+<section class="portal-hero-card">
+    <div class="hero-kicker">Today's Field Summary</div>
+    <div class="portal-hero-title">{{ portal_vendor_name|default:"Vendor Team" }}</div>
+    <p class="portal-hero-copy mb-3">Capture daily work, upload site evidence, and keep project managers updated from the field in a mobile-first workflow.</p>
+    <div class="portal-stat-grid">
+        <div class="portal-stat-card">
+            <span class="portal-stat-label">Assigned Projects</span>
+            <div class="portal-stat-value">{{ dashboard_stats.assigned_projects }}</div>
+        </div>
+        <div class="portal-stat-card is-green">
+            <span class="portal-stat-label">Today's Updates</span>
+            <div class="portal-stat-value">{{ dashboard_stats.submitted_updates|default:0 }}</div>
+        </div>
+        <div class="portal-stat-card is-orange">
+            <span class="portal-stat-label">Pending Reviews</span>
+            <div class="portal-stat-value">{{ dashboard_stats.pending_updates }}</div>
+        </div>
+        <div class="portal-stat-card is-dark">
+            <span class="portal-stat-label">Open Issues</span>
+            <div class="portal-stat-value">{{ dashboard_stats.open_issues }}</div>
+        </div>
     </div>
 </section>
 
-<div class="row g-4 mt-1">
-    <div class="col-lg-6">
-        <section class="surface-panel h-100">
-            <div class="section-heading"><h3 class="section-title">Assigned Sites</h3></div>
-            <div class="stack-list">
-                {% for row in dashboard_payload.assignments %}
-                <div class="stack-item stack-item-block">
+<section class="portal-section-card">
+    <div class="portal-section-head">
+        <div>
+            <h2 class="portal-section-title">Quick Actions</h2>
+            <div class="portal-card-copy">Large upload actions for site teams working from phones.</div>
+        </div>
+    </div>
+    <div class="portal-action-grid">
+        <a class="portal-action-card" href="{% url 'portal-updates' %}">
+            <span class="portal-action-icon"><i class="bi bi-clipboard-plus"></i></span>
+            <span class="portal-action-title">Upload Daily Progress</span>
+            <span class="portal-action-copy">Work done, quantity, manpower, and tomorrow plan.</span>
+        </a>
+        <a class="portal-action-card" href="{% url 'portal-media' %}">
+            <span class="portal-action-icon"><i class="bi bi-camera"></i></span>
+            <span class="portal-action-title">Upload Photos</span>
+            <span class="portal-action-copy">Site images with preview, location, and timeline context.</span>
+        </a>
+        <a class="portal-action-card" href="{% url 'portal-media' %}">
+            <span class="portal-action-icon"><i class="bi bi-camera-video"></i></span>
+            <span class="portal-action-title">Upload Videos</span>
+            <span class="portal-action-copy">Progress clips, inspection videos, and before/after evidence.</span>
+        </a>
+        <a class="portal-action-card" href="{% url 'portal-documents' %}">
+            <span class="portal-action-icon"><i class="bi bi-file-earmark-arrow-up"></i></span>
+            <span class="portal-action-title">Upload Documents</span>
+            <span class="portal-action-copy">Test reports, certificates, drawings, and reports.</span>
+        </a>
+        <a class="portal-action-card" href="{% url 'portal-issues' %}">
+            <span class="portal-action-icon"><i class="bi bi-cone-striped"></i></span>
+            <span class="portal-action-title">Raise Site Issue</span>
+            <span class="portal-action-copy">Material shortage, equipment failure, safety, or client issue.</span>
+        </a>
+        <a class="portal-action-card" href="{% url 'portal-projects' %}">
+            <span class="portal-action-icon"><i class="bi bi-map"></i></span>
+            <span class="portal-action-title">View Assigned Projects</span>
+            <span class="portal-action-copy">See site scope, location, deadlines, and completion status.</span>
+        </a>
+    </div>
+</section>
+
+<div class="portal-desktop-grid two-col">
+    <section class="portal-section-card">
+        <div class="portal-section-head">
+            <div>
+                <h2 class="portal-section-title">Assigned Project Progress</h2>
+                <div class="portal-card-copy">Site cards with progress and work scope.</div>
+            </div>
+            <a class="portal-section-link" href="{% url 'portal-projects' %}">Open all</a>
+        </div>
+        <div class="portal-project-grid">
+            {% for row in assignment_cards %}
+            <article class="portal-project-card">
+                <div class="portal-project-card-top">
                     <div>
-                        <strong>{{ row.project_name }}</strong>
-                        <p class="mb-1">{{ row.site_name|default:row.project_name }} | {{ row.work_type|default:"Scope not set" }}</p>
-                        <div class="small text-muted">{{ row.location|default:"-" }}</div>
+                        <h3 class="portal-project-title">{{ row.project_name }}</h3>
+                        <div class="portal-project-subtitle">{{ row.site_name|default:row.site_code|default:"Assigned site" }}</div>
                     </div>
-                    <span class="status-pill qualified">{{ row.progress_percentage|floatformat:2 }}%</span>
+                    <span class="portal-badge is-green">{{ row.progress_percentage|floatformat:1 }}%</span>
                 </div>
-                {% empty %}
-                <p class="empty-state mb-0">No site assignment available.</p>
+                <div class="portal-project-meta">
+                    <span class="portal-mini-chip"><i class="bi bi-geo-alt"></i>{{ row.location|default:"Location pending" }}</span>
+                    <span class="portal-mini-chip"><i class="bi bi-tools"></i>{{ row.work_type|default:"Scope not set" }}</span>
+                </div>
+                <div class="mt-3">
+                    <div class="portal-progress-shell">
+                        <div class="portal-progress-bar" style="width: {{ row.progress_percentage|default:0 }}%;"></div>
+                    </div>
+                </div>
+            </article>
+            {% empty %}
+            <div class="portal-empty">No site assignment is synced yet for this vendor login.</div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="portal-section-card">
+        <div class="portal-section-head">
+            <div>
+                <h2 class="portal-section-title">Site Notifications</h2>
+                <div class="portal-card-copy">Approvals, comments, and latest field alerts.</div>
+            </div>
+            <a class="portal-section-link" href="{% url 'portal-notifications' %}">View all</a>
+        </div>
+        <div class="portal-notification-list">
+            {% for row in notification_rows %}
+            <article class="portal-notification-card">
+                <div class="portal-feed-meta">
+                    <div>
+                        <h3 class="portal-feed-title">{{ row.title }}</h3>
+                        <div class="portal-feed-copy">{{ row.message }}</div>
+                    </div>
+                    <span class="portal-badge is-dark">{{ row.status_label }}</span>
+                </div>
+                <div class="portal-project-meta">
+                    <span class="portal-mini-chip"><i class="bi bi-broadcast"></i>{{ row.channel_label }}</span>
+                    <span class="portal-mini-chip"><i class="bi bi-clock"></i>{{ row.created_at|slice:":10" }}</span>
+                </div>
+            </article>
+            {% empty %}
+            <div class="portal-empty">No notifications yet.</div>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+<div class="portal-desktop-grid two-col">
+    <section class="portal-section-card">
+        <div class="portal-section-head">
+            <div>
+                <h2 class="portal-section-title">Work Timeline</h2>
+                <div class="portal-card-copy">A social-style project feed for recent site activity.</div>
+            </div>
+        </div>
+        <div class="portal-feed-list">
+            {% for group in timeline_groups %}
+            <div class="portal-feed-day">
+                <div class="portal-feed-date">{{ group.date_label }}</div>
+                {% for row in group.entries %}
+                <article class="portal-feed-card">
+                    <div class="portal-feed-meta">
+                        <div>
+                            <h3 class="portal-feed-title">{{ row.title }}</h3>
+                            {% if row.project_name %}<div class="portal-project-subtitle">{{ row.project_name }}</div>{% endif %}
+                        </div>
+                        {% if row.status %}<span class="portal-badge">{{ row.status }}</span>{% endif %}
+                    </div>
+                    <div class="portal-feed-copy mt-2">{{ row.summary }}</div>
+                    {% if row.meta %}
+                    <div class="portal-project-meta mt-2">
+                        <span class="portal-mini-chip"><i class="bi bi-lightning-charge"></i>{{ row.meta }}</span>
+                    </div>
+                    {% endif %}
+                </article>
                 {% endfor %}
             </div>
-        </section>
-    </div>
-    <div class="col-lg-6">
-        <section class="surface-panel h-100">
-            <div class="section-heading"><h3 class="section-title">Recent Progress Updates</h3></div>
-            <div class="table-responsive">
-                <table class="table procurement-table align-middle">
-                    <thead><tr><th>Date</th><th>Project</th><th>Work</th><th>Qty</th><th>Status</th></tr></thead>
-                    <tbody>
-                        {% for row in dashboard_payload.recent_updates %}
-                        <tr>
-                            <td>{{ row.update_date }}</td>
-                            <td>{{ row.project_name }}</td>
-                            <td>{{ row.work_category }}</td>
-                            <td>{{ row.quantity_completed|default:"-" }} {{ row.unit }}</td>
-                            <td>{{ row.status_label }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="5" class="text-center py-4 text-muted">No updates submitted yet.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            {% empty %}
+            <div class="portal-empty">No field activity has been uploaded yet.</div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="portal-section-card">
+        <div class="portal-section-head">
+            <div>
+                <h2 class="portal-section-title">Recent Uploads</h2>
+                <div class="portal-card-copy">Image-first site evidence with quick access to the latest uploads.</div>
             </div>
-        </section>
-    </div>
+            <a class="portal-section-link" href="{% url 'portal-media' %}">Open gallery</a>
+        </div>
+        <div class="portal-gallery-grid">
+            {% for row in recent_media_rows %}
+            <article class="portal-media-card">
+                <div class="portal-media-preview">
+                    {% if row.media_type == 'video' %}
+                    <video src="{{ row.file_url }}" muted playsinline preload="metadata"></video>
+                    {% else %}
+                    <img src="{{ row.file_url }}" alt="{{ row.caption|default:'Site media' }}">
+                    {% endif %}
+                </div>
+                <div class="mt-3">
+                    <div class="portal-feed-title">{{ row.caption|default:row.media_type_label }}</div>
+                    <div class="portal-project-subtitle">{{ row.project_name }}</div>
+                </div>
+            </article>
+            {% empty %}
+            <div class="portal-empty">No media uploaded yet.</div>
+            {% endfor %}
+        </div>
+    </section>
 </div>
 {% endblock %}

@@ -1,65 +1,180 @@
 {% extends "portal/base.html" %}
 
 {% block content %}
-<div class="row g-4">
-    <div class="col-xl-5">
-        <section class="surface-panel form-shell">
-            <div class="section-heading"><h3 class="section-title">Submit Daily Progress</h3></div>
-            <form method="post" class="d-grid gap-3">
-                {% csrf_token %}
-                <div>
-                    <label class="form-label" for="assignment">Assigned Project / Site</label>
-                    <select class="form-select" id="assignment" name="assignment" required>
-                        <option value="">Select assignment</option>
-                        {% for row in assignment_options %}
-                        <option value="{{ row.id }}">{{ row.project_code }} - {{ row.project_name }} | {{ row.work_type }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="row g-3">
-                    <div class="col-md-6"><label class="form-label" for="update_date">Update Date</label><input class="form-control" type="date" id="update_date" name="update_date" required></div>
-                    <div class="col-md-6"><label class="form-label" for="work_category">Work Category</label><input class="form-control" type="text" id="work_category" name="work_category" required></div>
-                    <div class="col-12"><label class="form-label" for="work_description">Work Description</label><textarea class="form-control" id="work_description" name="work_description" rows="3" required></textarea></div>
-                    <div class="col-12"><label class="form-label" for="todays_achievement">Today's Achievement</label><textarea class="form-control" id="todays_achievement" name="todays_achievement" rows="2"></textarea></div>
-                    <div class="col-md-4"><label class="form-label" for="quantity_completed">Quantity Completed</label><input class="form-control" type="number" step="0.01" id="quantity_completed" name="quantity_completed"></div>
-                    <div class="col-md-4"><label class="form-label" for="unit">Unit</label><input class="form-control" type="text" id="unit" name="unit"></div>
-                    <div class="col-md-4"><label class="form-label" for="progress_percentage">Progress %</label><input class="form-control" type="number" step="0.01" id="progress_percentage" name="progress_percentage"></div>
-                    <div class="col-md-4"><label class="form-label" for="manpower_used">Manpower Used</label><input class="form-control" type="number" id="manpower_used" name="manpower_used" value="0"></div>
-                    <div class="col-md-8"><label class="form-label" for="equipment_used">Equipment Used</label><textarea class="form-control" id="equipment_used" name="equipment_used" rows="2"></textarea></div>
-                    <div class="col-12"><label class="form-label" for="material_consumed">Material Consumed</label><textarea class="form-control" id="material_consumed" name="material_consumed" rows="2"></textarea></div>
-                    <div class="col-12"><label class="form-label" for="issues_faced">Issues Faced</label><textarea class="form-control" id="issues_faced" name="issues_faced" rows="2"></textarea></div>
-                    <div class="col-12"><label class="form-label" for="delay_reasons">Delay Reasons</label><textarea class="form-control" id="delay_reasons" name="delay_reasons" rows="2"></textarea></div>
-                    <div class="col-12"><label class="form-label" for="tomorrow_plan">Tomorrow Plan</label><textarea class="form-control" id="tomorrow_plan" name="tomorrow_plan" rows="2"></textarea></div>
-                </div>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-outline-primary" type="submit" name="save_action" value="draft">Save Draft</button>
-                    <button class="btn btn-primary" type="submit" name="save_action" value="submit">Submit Update</button>
-                </div>
-            </form>
-        </section>
+<section class="portal-section-card">
+    <div class="portal-section-head">
+        <div>
+            <h2 class="portal-section-title">Upload Center</h2>
+            <div class="portal-card-copy">Quick upload workflow for progress, photos, videos, and field documents.</div>
+        </div>
     </div>
-    <div class="col-xl-7">
-        <section class="surface-panel">
-            <div class="section-heading"><h3 class="section-title">Submitted Updates</h3></div>
-            <div class="table-responsive">
-                <table class="table procurement-table align-middle">
-                    <thead><tr><th>Date</th><th>Project</th><th>Category</th><th>Qty</th><th>Status</th></tr></thead>
-                    <tbody>
-                        {% for row in update_rows %}
-                        <tr>
-                            <td>{{ row.update_date }}</td>
-                            <td>{{ row.project_name }}</td>
-                            <td>{{ row.work_category }}</td>
-                            <td>{{ row.quantity_completed|default:"-" }} {{ row.unit }}</td>
-                            <td>{{ row.status_label }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="5" class="text-center py-4 text-muted">No updates yet.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <div class="portal-upload-grid">
+        <a class="portal-action-card" href="#daily-progress-form">
+            <span class="portal-action-icon"><i class="bi bi-clipboard-check"></i></span>
+            <span class="portal-action-title">Daily Progress</span>
+            <span class="portal-action-copy">Work done today, manpower, issues, and tomorrow plan.</span>
+        </a>
+        <a class="portal-action-card" href="{% url 'portal-media' %}">
+            <span class="portal-action-icon"><i class="bi bi-images"></i></span>
+            <span class="portal-action-title">Photos & Videos</span>
+            <span class="portal-action-copy">Capture field evidence and upload directly from site.</span>
+        </a>
+        <a class="portal-action-card" href="{% url 'portal-documents' %}">
+            <span class="portal-action-icon"><i class="bi bi-file-earmark-text"></i></span>
+            <span class="portal-action-title">Documents</span>
+            <span class="portal-action-copy">Test certificates, site reports, and inspection files.</span>
+        </a>
+        <a class="portal-action-card" href="{% url 'portal-issues' %}">
+            <span class="portal-action-icon"><i class="bi bi-flag"></i></span>
+            <span class="portal-action-title">Raise Issue</span>
+            <span class="portal-action-copy">Report shortage, safety, technical, or equipment issues.</span>
+        </a>
+    </div>
+</section>
+
+<section class="portal-form-card" id="daily-progress-form">
+    <div class="portal-section-head">
+        <div>
+            <h2 class="portal-section-title">Daily Progress Update</h2>
+            <div class="portal-card-copy">A short mobile form to report what was completed on site today.</div>
+        </div>
+    </div>
+    <form method="post" class="d-grid gap-3">
+        {% csrf_token %}
+        <div>
+            <label class="form-label" for="assignment">Assigned Project / Site</label>
+            <select class="form-select" id="assignment" name="assignment" required>
+                <option value="">Select assigned project</option>
+                {% for row in assignment_options %}
+                <option value="{{ row.id }}">{{ row.project_code }} - {{ row.project_name }} | {{ row.work_type|default:"Scope pending" }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="row g-3">
+            <div class="col-6">
+                <label class="form-label" for="update_date">Update Date</label>
+                <input class="form-control" type="date" id="update_date" name="update_date" required>
             </div>
-        </section>
-    </div>
+            <div class="col-6">
+                <label class="form-label" for="progress_percentage">Progress %</label>
+                <input class="form-control" type="number" min="0" max="100" step="0.01" id="progress_percentage" name="progress_percentage" placeholder="0-100">
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="work_category">Work Done Today</label>
+                <input class="form-control" type="text" id="work_category" name="work_category" placeholder="Civil work / cable laying / module installation" required>
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="work_description">Work Description</label>
+                <textarea class="form-control" id="work_description" name="work_description" rows="3" placeholder="Describe the actual activity carried out on site." required></textarea>
+            </div>
+            <div class="col-7">
+                <label class="form-label" for="quantity_completed">Quantity Completed</label>
+                <input class="form-control" type="number" step="0.01" id="quantity_completed" name="quantity_completed" placeholder="Completed quantity">
+            </div>
+            <div class="col-5">
+                <label class="form-label" for="unit">Unit</label>
+                <input class="form-control" type="text" id="unit" name="unit" placeholder="MW / mtr / nos">
+            </div>
+            <div class="col-6">
+                <label class="form-label" for="manpower_used">Manpower Used</label>
+                <input class="form-control" type="number" id="manpower_used" name="manpower_used" value="0">
+            </div>
+            <div class="col-6">
+                <label class="form-label" for="todays_achievement">Today's Achievement</label>
+                <input class="form-control" type="text" id="todays_achievement" name="todays_achievement" placeholder="Short achievement line">
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="material_consumed">Material Consumed</label>
+                <textarea class="form-control" id="material_consumed" name="material_consumed" rows="2" placeholder="Mention major material usage."></textarea>
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="issues_faced">Issues Faced</label>
+                <textarea class="form-control" id="issues_faced" name="issues_faced" rows="2" placeholder="Mention field issues or constraints."></textarea>
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="tomorrow_plan">Tomorrow Plan</label>
+                <textarea class="form-control" id="tomorrow_plan" name="tomorrow_plan" rows="2" placeholder="What is the next day's plan?"></textarea>
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="equipment_used">Equipment Used</label>
+                <textarea class="form-control" id="equipment_used" name="equipment_used" rows="2" placeholder="List equipment or machinery used."></textarea>
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="delay_reasons">Delay Reasons</label>
+                <textarea class="form-control" id="delay_reasons" name="delay_reasons" rows="2" placeholder="Only fill if work was delayed."></textarea>
+            </div>
+        </div>
+        <div class="d-grid gap-2">
+            <button class="btn btn-outline-primary" type="submit" name="save_action" value="draft">Save Draft</button>
+            <button class="btn btn-primary" type="submit" name="save_action" value="submit">Submit Update</button>
+        </div>
+    </form>
+</section>
+
+<div class="portal-desktop-grid two-col">
+    <section class="portal-section-card">
+        <div class="portal-section-head">
+            <div>
+                <h2 class="portal-section-title">Recent Submissions</h2>
+                <div class="portal-card-copy">Your latest field updates in timeline style.</div>
+            </div>
+        </div>
+        <div class="portal-feed-list">
+            {% for row in update_rows %}
+            <article class="portal-feed-card">
+                <div class="portal-feed-meta">
+                    <div>
+                        <h3 class="portal-feed-title">{{ row.work_category }}</h3>
+                        <div class="portal-project-subtitle">{{ row.project_name }} | {{ row.update_date }}</div>
+                    </div>
+                    <span class="portal-badge">{{ row.status_label }}</span>
+                </div>
+                <div class="portal-feed-copy mt-2">{{ row.work_description|default:row.todays_achievement|default:"Daily update submitted." }}</div>
+                <div class="portal-project-meta mt-2">
+                    <span class="portal-mini-chip"><i class="bi bi-lightning-charge"></i>{{ row.quantity_completed|default:"-" }} {{ row.unit }}</span>
+                    {% if row.progress_percentage %}
+                    <span class="portal-mini-chip"><i class="bi bi-graph-up-arrow"></i>{{ row.progress_percentage }}%</span>
+                    {% endif %}
+                </div>
+            </article>
+            {% empty %}
+            <div class="portal-empty">No daily updates submitted yet.</div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="portal-section-card">
+        <div class="portal-section-head">
+            <div>
+                <h2 class="portal-section-title">Latest Field Uploads</h2>
+                <div class="portal-card-copy">The newest media and document activity from your side.</div>
+            </div>
+        </div>
+        <div class="portal-feed-list">
+            {% for row in recent_media_rows %}
+            <article class="portal-media-card">
+                <div class="portal-feed-title">{{ row.caption|default:row.media_type_label }}</div>
+                <div class="portal-project-subtitle">{{ row.project_name }}</div>
+                <div class="portal-project-meta mt-2">
+                    <span class="portal-mini-chip"><i class="bi bi-camera"></i>{{ row.media_type_label }}</span>
+                    <span class="portal-mini-chip"><i class="bi bi-clock"></i>{{ row.upload_date|slice:":10" }}</span>
+                </div>
+            </article>
+            {% endfor %}
+            {% for row in recent_document_rows %}
+            <article class="portal-media-card">
+                <div class="portal-feed-title">{{ row.document_type_label }}</div>
+                <div class="portal-project-subtitle">{{ row.project_name }}</div>
+                <div class="portal-project-meta mt-2">
+                    <span class="portal-mini-chip"><i class="bi bi-file-earmark-text"></i>Document</span>
+                    <span class="portal-mini-chip"><i class="bi bi-clock"></i>{{ row.upload_date|slice:":10" }}</span>
+                </div>
+            </article>
+            {% endfor %}
+            {% if not recent_media_rows and not recent_document_rows %}
+            <div class="portal-empty">No media or document uploads yet.</div>
+            {% endif %}
+        </div>
+    </section>
 </div>
 {% endblock %}

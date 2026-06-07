@@ -1,37 +1,43 @@
 {% extends "portal/base.html" %}
 
 {% block content %}
-<section class="surface-panel">
-    <div class="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
-        <div class="section-heading mb-0"><h3 class="section-title">Active Sessions</h3></div>
+<section class="portal-section-card">
+    <div class="portal-section-head">
+        <div>
+            <h2 class="portal-section-title">Active Sessions</h2>
+            <div class="portal-card-copy">Sign out individual devices or close every current session.</div>
+        </div>
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="action" value="signout_all">
-            <button type="submit" class="btn btn-sm btn-outline-danger">Sign Out All Devices</button>
+            <button type="submit" class="btn btn-outline-danger">Sign Out All</button>
         </form>
     </div>
-    <div class="stack-list mb-3">
+    <div class="portal-session-list">
         {% for row in session_rows %}
-        <div class="stack-item stack-item-block">
-            <div>
-                <strong>{{ row.ip_address|default:"Unknown IP" }}</strong>
-                <p class="mb-1">{{ row.user_agent|default:"-" }}</p>
-                <div class="small text-muted">{{ row.logged_in_at }}</div>
-                {% if row.is_current %}<div class="small text-primary mt-1">Current session</div>{% endif %}
+        <article class="portal-session-card">
+            <div class="portal-feed-meta">
+                <div>
+                    <h3 class="portal-feed-title">{{ row.ip_address|default:"Unknown IP" }}</h3>
+                    <div class="portal-feed-copy">{{ row.user_agent|default:"Device information not available." }}</div>
+                </div>
+                <span class="portal-badge {% if row.is_active %}is-green{% endif %}">
+                    {% if row.is_current %}Current{% elif row.is_active %}Active{% else %}Closed{% endif %}
+                </span>
             </div>
-            <div class="d-flex flex-column align-items-end gap-2">
-                <span class="status-pill {% if row.is_active %}qualified{% else %}disqualified{% endif %}">{% if row.is_active %}Active{% else %}Closed{% endif %}</span>
+            <div class="portal-project-meta mt-2">
+                <span class="portal-mini-chip"><i class="bi bi-clock"></i>{{ row.logged_in_at|slice:":16" }}</span>
                 {% if row.is_active %}
                 <form method="post">
                     {% csrf_token %}
                     <input type="hidden" name="session_key" value="{{ row.session_key }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Sign Out</button>
+                    <button type="submit" class="portal-mini-chip border-0">Sign Out</button>
                 </form>
                 {% endif %}
             </div>
-        </div>
+        </article>
         {% empty %}
-        <p class="empty-state mb-0">No session history available.</p>
+        <div class="portal-empty">No session history available.</div>
         {% endfor %}
     </div>
 </section>

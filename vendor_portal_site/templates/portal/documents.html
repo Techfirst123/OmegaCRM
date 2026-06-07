@@ -1,66 +1,133 @@
 {% extends "portal/base.html" %}
 
 {% block content %}
-<div class="row g-4">
-    <div class="col-xl-4">
-        <section class="surface-panel form-shell">
-            <div class="section-heading"><h3 class="section-title">Upload Document</h3></div>
-            <form method="post" enctype="multipart/form-data" class="d-grid gap-3">
-                {% csrf_token %}
-                <div>
-                    <label class="form-label" for="assignment">Assigned Project / Site</label>
-                    <select class="form-select" id="assignment" name="assignment" required>
-                        <option value="">Select assignment</option>
-                        {% for row in assignment_options %}
-                        <option value="{{ row.id }}">{{ row.project_code }} - {{ row.project_name }} | {{ row.work_type }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label class="form-label" for="daily_update">Link Daily Update</label>
-                    <select class="form-select" id="daily_update" name="daily_update">
-                        <option value="">Optional</option>
-                        {% for row in daily_update_options %}
-                        <option value="{{ row.id }}">{{ row.update_date }} | {{ row.project_name }} | {{ row.work_category }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label class="form-label" for="document_type">Document Type</label>
-                    <select class="form-select" id="document_type" name="document_type">
-                        {% for value, label in document_type_choices %}
-                        <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div><label class="form-label" for="file">File</label><input class="form-control" id="file" name="file" type="file" required></div>
-                <div><label class="form-label" for="remarks">Remarks</label><textarea class="form-control" id="remarks" name="remarks" rows="2"></textarea></div>
-                <button class="btn btn-primary" type="submit">Upload Document</button>
-            </form>
-        </section>
+<section class="portal-form-card">
+    <div class="portal-section-head">
+        <div>
+            <h2 class="portal-section-title">Document Upload</h2>
+            <div class="portal-card-copy">Send test certificates, reports, drawings, and field documents from site.</div>
+        </div>
     </div>
-    <div class="col-xl-8">
-        <section class="surface-panel">
-            <div class="section-heading"><h3 class="section-title">Document Register</h3></div>
-            <div class="table-responsive">
-                <table class="table procurement-table align-middle">
-                    <thead><tr><th>Project</th><th>Type</th><th>Remarks</th><th>Uploaded</th><th>File</th></tr></thead>
-                    <tbody>
-                        {% for row in document_rows %}
-                        <tr>
-                            <td>{{ row.project_name }}</td>
-                            <td>{{ row.document_type_label }}</td>
-                            <td>{{ row.remarks|default:"-" }}</td>
-                            <td>{{ row.upload_date }}</td>
-                            <td><a href="{{ row.file_url }}" target="_blank" rel="noopener">Open</a></td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="5" class="text-center py-4 text-muted">No documents uploaded yet.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <form id="documentUploadForm" method="post" enctype="multipart/form-data" class="d-grid gap-3">
+        {% csrf_token %}
+        <div>
+            <label class="form-label" for="assignment">Assigned Project / Site</label>
+            <select class="form-select" id="assignment" name="assignment" required>
+                <option value="">Select project / site</option>
+                {% for row in assignment_options %}
+                <option value="{{ row.id }}">{{ row.project_code }} - {{ row.project_name }} | {{ row.work_type|default:"Scope pending" }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="row g-3">
+            <div class="col-6">
+                <label class="form-label" for="daily_update">Link Update</label>
+                <select class="form-select" id="daily_update" name="daily_update">
+                    <option value="">Optional</option>
+                    {% for row in daily_update_options %}
+                    <option value="{{ row.id }}">{{ row.update_date }} | {{ row.project_name }}</option>
+                    {% endfor %}
+                </select>
             </div>
-        </section>
+            <div class="col-6">
+                <label class="form-label" for="document_type">Document Type</label>
+                <select class="form-select" id="document_type" name="document_type">
+                    {% for value, label in document_type_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="portal-upload-dropzone">
+            <label class="form-label d-block mb-2" for="file">Choose Document</label>
+            <input class="form-control" id="file" name="file" type="file" accept=".pdf,.xlsx,.xls,.doc,.docx,.dwg" required>
+            <div class="portal-card-copy mt-2">PDF, Excel, Word, and drawing files are supported.</div>
+        </div>
+        <div class="col-12">
+            <label class="form-label" for="remarks">Remarks</label>
+            <textarea class="form-control" id="remarks" name="remarks" rows="2" placeholder="Add context or remarks for the document."></textarea>
+        </div>
+        <div class="portal-upload-progress" id="documentUploadProgress">
+            <div class="d-flex justify-content-between small mb-2">
+                <span>Uploading document</span>
+                <strong id="documentUploadPercent">0%</strong>
+            </div>
+            <div class="portal-progress-shell">
+                <div class="portal-progress-bar" id="documentUploadBar" style="width: 0%;"></div>
+            </div>
+        </div>
+        <button class="btn btn-primary" type="submit">Upload Document</button>
+    </form>
+</section>
+
+<section class="portal-section-card">
+    <div class="portal-section-head">
+        <div>
+            <h2 class="portal-section-title">Document Timeline</h2>
+            <div class="portal-card-copy">Recent site documents grouped as a lightweight field register.</div>
+        </div>
     </div>
-</div>
+    <div class="portal-tab-strip mb-3">
+        <a class="portal-tab-pill" href="{% url 'portal-media' %}#photo-gallery">Photos</a>
+        <a class="portal-tab-pill" href="{% url 'portal-media' %}#video-gallery">Videos</a>
+        <a class="portal-tab-pill active" href="{% url 'portal-documents' %}">Documents</a>
+    </div>
+    <div class="portal-feed-list">
+        {% for row in document_rows %}
+        <article class="portal-media-card">
+            <div class="portal-feed-meta">
+                <div>
+                    <h3 class="portal-feed-title">{{ row.document_type_label }}</h3>
+                    <div class="portal-project-subtitle">{{ row.project_name }}</div>
+                </div>
+                <a class="portal-badge text-decoration-none" href="{{ row.file_url }}" target="_blank" rel="noopener">Open</a>
+            </div>
+            <div class="portal-feed-copy mt-2">{{ row.remarks|default:"No remarks added." }}</div>
+            <div class="portal-project-meta mt-2">
+                <span class="portal-mini-chip"><i class="bi bi-file-earmark-check"></i>{{ row.document_type_label }}</span>
+                <span class="portal-mini-chip"><i class="bi bi-clock"></i>{{ row.upload_date|slice:":10" }}</span>
+            </div>
+        </article>
+        {% empty %}
+        <div class="portal-empty">No documents uploaded yet.</div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const form = document.getElementById('documentUploadForm');
+    const progressWrap = document.getElementById('documentUploadProgress');
+    const progressBar = document.getElementById('documentUploadBar');
+    const progressPercent = document.getElementById('documentUploadPercent');
+
+    function setProgress(value) {
+        progressWrap.classList.add('active');
+        progressBar.style.width = `${value}%`;
+        progressPercent.textContent = `${value}%`;
+    }
+
+    form?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.upload.addEventListener('progress', (event) => {
+            if (!event.lengthComputable) return;
+            setProgress(Math.round((event.loaded / event.total) * 100));
+        });
+        xhr.addEventListener('load', () => {
+            setProgress(100);
+            window.location.reload();
+        });
+        xhr.addEventListener('error', () => {
+            progressWrap.classList.remove('active');
+            alert('Upload failed. Please try again.');
+        });
+        xhr.send(new FormData(form));
+    });
+})();
+</script>
 {% endblock %}

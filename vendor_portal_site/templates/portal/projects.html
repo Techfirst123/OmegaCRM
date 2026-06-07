@@ -1,36 +1,48 @@
 {% extends "portal/base.html" %}
 
 {% block content %}
-<section class="surface-panel">
-    <div class="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
-        <div class="section-heading mb-0">
-            <h3 class="section-title">Assigned Projects & Sites</h3>
-            <p class="section-copy">Only your assigned work appears here.</p>
+<section class="portal-section-card">
+    <div class="portal-section-head">
+        <div>
+            <h2 class="portal-section-title">Assigned Projects & Sites</h2>
+            <div class="portal-card-copy">Only your assigned projects, sites, and scopes appear here.</div>
         </div>
-        <form class="d-flex gap-2" method="get">
-            <input class="form-control" type="text" name="q" value="{{ query }}" placeholder="Search project, site, or work type">
-            <button class="btn btn-outline-primary" type="submit">Search</button>
-        </form>
     </div>
-    <div class="table-responsive">
-        <table class="table procurement-table align-middle">
-            <thead><tr><th>Project</th><th>Site</th><th>Location</th><th>Client</th><th>Capacity</th><th>Work Type</th><th>Progress</th></tr></thead>
-            <tbody>
-                {% for row in project_rows %}
-                <tr>
-                    <td><strong>{{ row.project_code }}</strong><div class="small text-muted">{{ row.project_name }}</div></td>
-                    <td>{{ row.site_name|default:"-" }}<div class="small text-muted">{{ row.site_code|default:"-" }}</div></td>
-                    <td>{{ row.location|default:"-" }}</td>
-                    <td>{{ row.client_name|default:"-" }}</td>
-                    <td>{{ row.capacity_mw|default:"-" }} MW</td>
-                    <td>{{ row.work_type|default:"-" }}</td>
-                    <td><span class="status-pill qualified">{{ row.progress_percentage|floatformat:2 }}%</span></td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="7" class="text-center py-4 text-muted">No assigned projects found.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <form class="d-grid gap-3 mb-3" method="get">
+        <input class="form-control" type="text" name="q" value="{{ query }}" placeholder="Search project, site, location, or work type">
+        <button class="btn portal-btn-secondary" type="submit">Search Projects</button>
+    </form>
+</section>
+
+<section class="portal-project-grid">
+    {% for row in project_rows %}
+    <article class="portal-project-card">
+        <div class="portal-project-card-top">
+            <div>
+                <div class="hero-kicker mb-2">{{ row.project_code }}</div>
+                <h3 class="portal-project-title">{{ row.project_name }}</h3>
+                <div class="portal-project-subtitle">{{ row.site_name|default:"Assigned site" }}{% if row.site_code %} | {{ row.site_code }}{% endif %}</div>
+            </div>
+            <span class="portal-badge is-green">{{ row.progress_percentage|floatformat:1 }}%</span>
+        </div>
+        <div class="portal-project-meta">
+            <span class="portal-mini-chip"><i class="bi bi-geo-alt"></i>{{ row.location|default:"Location pending" }}</span>
+            <span class="portal-mini-chip"><i class="bi bi-briefcase"></i>{{ row.client_name|default:"Client pending" }}</span>
+            <span class="portal-mini-chip"><i class="bi bi-lightning-charge"></i>{{ row.capacity_mw|default:"-" }} MW</span>
+            <span class="portal-mini-chip"><i class="bi bi-tools"></i>{{ row.work_type|default:"Scope pending" }}</span>
+        </div>
+        <div class="mt-3">
+            <div class="d-flex justify-content-between small mb-2">
+                <span>Completion Progress</span>
+                <strong>{{ row.progress_percentage|floatformat:1 }}%</strong>
+            </div>
+            <div class="portal-progress-shell">
+                <div class="portal-progress-bar" style="width: {{ row.progress_percentage|default:0 }}%;"></div>
+            </div>
+        </div>
+    </article>
+    {% empty %}
+    <div class="portal-empty">No assigned projects found for this vendor account.</div>
+    {% endfor %}
 </section>
 {% endblock %}
