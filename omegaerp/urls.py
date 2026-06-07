@@ -3,6 +3,10 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+admin.site.site_header = 'OmegaERP Admin Panel'
+admin.site.site_title = 'OmegaERP Admin Panel'
+admin.site.index_title = 'OmegaERP Administration'
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('administration/', include('administration.urls')),
