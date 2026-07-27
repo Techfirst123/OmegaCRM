@@ -42,12 +42,11 @@ INSTALLED_APPS = [
     'payments',
     'documents',
     'reports',
-    'vendor_portal',
+    'search',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'omegaerp.middleware.VendorPortalHostRedirectMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -71,6 +70,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'permissions.context_processors.user_permissions_context',
             ],
         },
     },

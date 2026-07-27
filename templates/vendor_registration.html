@@ -330,8 +330,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>const REGISTER_URL = "{% url 'vendor-register' %}";</script>
 <script src="{% static 'js/vendor.js' %}?v={% now "U" %}"></script>
 {% endblock %}

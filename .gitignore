@@ -31,3 +31,7 @@ Thumbs.db
 
 .vercel
 .env*
+
+# Auto-generated / binary
+dfd_pdf_preview/
+vector_index/faiss.index

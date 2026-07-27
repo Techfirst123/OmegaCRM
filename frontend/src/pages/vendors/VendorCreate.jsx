@@ -1,0 +1,377 @@
+import React, { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Building2, User, FileText, CreditCard, CheckCircle, Loader2 } from 'lucide-react'
+
+function getCookie(name) {
+  const value = `; ${document.cookie}`
+  const parts = value.split(`; ${name}=`)
+  if (parts.length === 2) return parts.pop().split(';').shift()
+  return ''
+}
+
+const SECTIONS = ['Company', 'Contact', 'KYC', 'Financial']
+
+const Field = ({ label, required, children }) => (
+  <div>
+    <label className="block text-xs font-medium text-slate-600 mb-1">
+      {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+    </label>
+    {children}
+  </div>
+)
+
+const Input = (props) => (
+  <input
+    {...props}
+    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition"
+  />
+)
+
+const Select = ({ children, ...props }) => (
+  <select
+    {...props}
+    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition"
+  >
+    {children}
+  </select>
+)
+
+const Textarea = (props) => (
+  <textarea
+    {...props}
+    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition resize-none"
+  />
+)
+
+export default function VendorCreate() {
+  const navigate = useNavigate()
+  const [step, setStep] = useState(0)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const [form, setForm] = useState({
+    companyName: '', address: '', address2: '', city: '', state: '', pin: '', country: 'India',
+    vendorType: '', vendorCategory: '', contactPerson: '', emailId: '',
+    attendeeName: '', bdeName: '', meetingWith: '',
+    experienceDetails: '', clientListData: '',
+    msmeReg: '', panNo: '', pfReg: '', aadhaarNo: '',
+    gstNo: '', gstType: '', gstStatus: '', lastGstr1: '', gstPendingStatus: '',
+    labourWelfareFund: '', professionalTax: '',
+    turnoverYear1: '', turnoverYear2: '', turnoverYear3: '',
+    bankAccountName: '', bankNameAddress: '', accountType: '', accountNumber: '',
+    bankProofType: '', bankProofFile: null,
+    qualification_status: '',
+  })
+
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.type === 'file' ? e.target.files[0] : e.target.value }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
+
+    const fd = new FormData()
+    Object.entries(form).forEach(([k, v]) => {
+      if (v !== null && v !== undefined && v !== '') fd.append(k, v)
+    })
+
+    try {
+      const res = await fetch('/vendors/register/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'include',
+        body: fd,
+      })
+
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('application/json')) {
+        setError('Session expired or not logged in. Please log in via /admin/login/ and try again.')
+        setSubmitting(false)
+        return
+      }
+
+      const data = await res.json()
+      if (res.ok && data.vendor_id) {
+        setSuccess(`Vendor registered successfully! ID: ${data.vendor_id}`)
+        setTimeout(() => navigate('/vendors'), 2000)
+      } else {
+        const msg = Array.isArray(data.error) ? data.error.join(', ') : (data.error || 'Registration failed.')
+        setError(msg)
+      }
+    } catch {
+      setError('Network error. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const sectionIcons = [Building2, User, FileText, CreditCard]
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6 pb-8">
+      {/* Header */}
+      <div>
+        <Link to="/vendors" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4 transition-colors">
+          <ArrowLeft size={15} />Back to Vendors
+        </Link>
+        <h2 className="text-xl font-bold text-slate-900">Register New Vendor</h2>
+        <p className="text-slate-500 text-sm mt-0.5">Fill in all sections to complete vendor onboarding</p>
+      </div>
+
+      {/* Step tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {SECTIONS.map((s, i) => {
+          const Icon = sectionIcons[i]
+          return (
+            <button key={s} onClick={() => setStep(i)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                step === i
+                  ? 'bg-brand-500 text-white border-brand-500 shadow-sm'
+                  : 'bg-white text-slate-600 border-surface-200 hover:border-brand-300'
+              }`}
+            >
+              <Icon size={14} />{s}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Banners */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded-xl px-4 py-3 flex items-center gap-2">
+          <CheckCircle size={16} />{success}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        {/* Section 0 — Company */}
+        {step === 0 && (
+          <div className="card p-6 space-y-4">
+            <h3 className="font-semibold text-slate-900 text-sm border-b border-surface-100 pb-3">Company Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <Field label="Company Name" required>
+                  <Input placeholder="Full registered company name" value={form.companyName} onChange={set('companyName')} required />
+                </Field>
+              </div>
+              <div className="md:col-span-2">
+                <Field label="Address Line 1" required>
+                  <Input placeholder="Street / building / locality" value={form.address} onChange={set('address')} required />
+                </Field>
+              </div>
+              <div className="md:col-span-2">
+                <Field label="Address Line 2">
+                  <Input placeholder="Floor, landmark (optional)" value={form.address2} onChange={set('address2')} />
+                </Field>
+              </div>
+              <Field label="City" required>
+                <Input placeholder="City" value={form.city} onChange={set('city')} required />
+              </Field>
+              <Field label="State" required>
+                <Input placeholder="State" value={form.state} onChange={set('state')} required />
+              </Field>
+              <Field label="PIN Code" required>
+                <Input placeholder="PIN / ZIP" value={form.pin} onChange={set('pin')} required />
+              </Field>
+              <Field label="Country" required>
+                <Input placeholder="Country" value={form.country} onChange={set('country')} required />
+              </Field>
+            </div>
+            <div className="flex justify-end pt-2">
+              <button type="button" onClick={() => setStep(1)} className="btn-primary">Next: Contact →</button>
+            </div>
+          </div>
+        )}
+
+        {/* Section 1 — Contact */}
+        {step === 1 && (
+          <div className="card p-6 space-y-4">
+            <h3 className="font-semibold text-slate-900 text-sm border-b border-surface-100 pb-3">Contact & Classification</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Vendor Type" required>
+                <Select value={form.vendorType} onChange={set('vendorType')} required>
+                  <option value="">Select type</option>
+                  <option value="private limited">Private Limited</option>
+                  <option value="proprieter">Proprieter</option>
+                  <option value="partner">Partner</option>
+                  <option value="individual">Individual</option>
+                </Select>
+              </Field>
+              <Field label="Vendor Category" required>
+                <Select value={form.vendorCategory} onChange={set('vendorCategory')} required>
+                  <option value="">Select category</option>
+                  <option value="service-provider">Service Provider</option>
+                  <option value="sub-contractor">Sub-contractor</option>
+                </Select>
+              </Field>
+              <Field label="Primary Contact Person" required>
+                <Input placeholder="Name of primary contact" value={form.contactPerson} onChange={set('contactPerson')} required />
+              </Field>
+              <Field label="Email ID" required>
+                <Input type="email" placeholder="contact@company.com" value={form.emailId} onChange={set('emailId')} required />
+              </Field>
+              <Field label="Attendee Name" required>
+                <Input placeholder="Who attended from vendor's side" value={form.attendeeName} onChange={set('attendeeName')} required />
+              </Field>
+              <Field label="Contacted By (BDE)" required>
+                <Input placeholder="Our team member who contacted" value={form.bdeName} onChange={set('bdeName')} required />
+              </Field>
+              <div className="md:col-span-2">
+                <Field label="Meeting With" required>
+                  <Input placeholder="Person / team the meeting was held with" value={form.meetingWith} onChange={set('meetingWith')} required />
+                </Field>
+              </div>
+              <div className="md:col-span-2">
+                <Field label="Experience Details" required>
+                  <Textarea rows={3} placeholder="Describe vendor's domain expertise and experience..." value={form.experienceDetails} onChange={set('experienceDetails')} required />
+                </Field>
+              </div>
+              <div className="md:col-span-2">
+                <Field label="List of Clients" required>
+                  <Textarea rows={2} placeholder="Client A, Client B, Client C (comma-separated)" value={form.clientListData} onChange={set('clientListData')} required />
+                </Field>
+              </div>
+            </div>
+            <div className="flex justify-between pt-2">
+              <button type="button" onClick={() => setStep(0)} className="btn-secondary">← Back</button>
+              <button type="button" onClick={() => setStep(2)} className="btn-primary">Next: KYC →</button>
+            </div>
+          </div>
+        )}
+
+        {/* Section 2 — KYC */}
+        {step === 2 && (
+          <div className="card p-6 space-y-4">
+            <h3 className="font-semibold text-slate-900 text-sm border-b border-surface-100 pb-3">KYC & Compliance Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="MSME Registration" required>
+                <Input placeholder="MSME Reg No." value={form.msmeReg} onChange={set('msmeReg')} required />
+              </Field>
+              <Field label="PAN Number" required>
+                <Input placeholder="ABCDE1234F" value={form.panNo} onChange={set('panNo')} required className="uppercase" />
+              </Field>
+              <Field label="PF Registration" required>
+                <Input placeholder="PF Reg No." value={form.pfReg} onChange={set('pfReg')} required />
+              </Field>
+              <Field label="Aadhaar Number" required>
+                <Input placeholder="12-digit Aadhaar" value={form.aadhaarNo} onChange={set('aadhaarNo')} required />
+              </Field>
+              <Field label="GST Number">
+                <Input placeholder="27AAACT2727Q1ZW (optional)" value={form.gstNo} onChange={set('gstNo')} />
+              </Field>
+              <Field label="GST Type">
+                <Input placeholder="Regular / Composition / Unregistered" value={form.gstType} onChange={set('gstType')} />
+              </Field>
+              <Field label="GST Status">
+                <Input placeholder="Active / Cancelled / Suspended" value={form.gstStatus} onChange={set('gstStatus')} />
+              </Field>
+              <Field label="Last GSTR-1">
+                <Input type="month" value={form.lastGstr1} onChange={set('lastGstr1')} />
+              </Field>
+              <Field label="GST Pending Status">
+                <Select value={form.gstPendingStatus} onChange={set('gstPendingStatus')}>
+                  <option value="">Select</option>
+                  <option value="more than year">More than year</option>
+                  <option value="less than second year">Less than second year</option>
+                </Select>
+              </Field>
+              <Field label="Labour Welfare Fund">
+                <Input placeholder="Registration / amount" value={form.labourWelfareFund} onChange={set('labourWelfareFund')} />
+              </Field>
+              <Field label="Professional Tax">
+                <Input placeholder="PT Registration" value={form.professionalTax} onChange={set('professionalTax')} />
+              </Field>
+            </div>
+            <div className="flex justify-between pt-2">
+              <button type="button" onClick={() => setStep(1)} className="btn-secondary">← Back</button>
+              <button type="button" onClick={() => setStep(3)} className="btn-primary">Next: Financial →</button>
+            </div>
+          </div>
+        )}
+
+        {/* Section 3 — Financial */}
+        {step === 3 && (
+          <div className="card p-6 space-y-4">
+            <h3 className="font-semibold text-slate-900 text-sm border-b border-surface-100 pb-3">Financial & Bank Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Field label="Turnover — Last FY" required>
+                <Input placeholder="e.g. 1.5 Cr" value={form.turnoverYear1} onChange={set('turnoverYear1')} required />
+              </Field>
+              <Field label="Turnover — Previous FY" required>
+                <Input placeholder="e.g. 1.2 Cr" value={form.turnoverYear2} onChange={set('turnoverYear2')} required />
+              </Field>
+              <Field label="Turnover — 3rd FY" required>
+                <Input placeholder="e.g. 0.9 Cr" value={form.turnoverYear3} onChange={set('turnoverYear3')} required />
+              </Field>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <Field label="Name as per Bank Account" required>
+                  <Input placeholder="Exact name on bank account" value={form.bankAccountName} onChange={set('bankAccountName')} required />
+                </Field>
+              </div>
+              <div className="md:col-span-2">
+                <Field label="Bank Name & Branch Address" required>
+                  <Textarea rows={2} placeholder="Bank name, branch, and address" value={form.bankNameAddress} onChange={set('bankNameAddress')} required />
+                </Field>
+              </div>
+              <Field label="Account Type" required>
+                <Select value={form.accountType} onChange={set('accountType')} required>
+                  <option value="">Select type</option>
+                  <option value="savings">Savings</option>
+                  <option value="current">Current</option>
+                  <option value="cash credit">Cash Credit</option>
+                  <option value="other">Other</option>
+                </Select>
+              </Field>
+              <Field label="Account Number" required>
+                <Input placeholder="Bank account number" value={form.accountNumber} onChange={set('accountNumber')} required />
+              </Field>
+              <Field label="Document Type" required>
+                <Select value={form.bankProofType} onChange={set('bankProofType')} required>
+                  <option value="">Select document</option>
+                  <option value="passbook">Passbook</option>
+                  <option value="cancelled-cheque">Cancelled Cheque</option>
+                </Select>
+              </Field>
+              <Field label="Vendor Status">
+                <Select value={form.qualification_status} onChange={set('qualification_status')}>
+                  <option value="">Pending (default)</option>
+                  <option value="qualified">Qualified</option>
+                  <option value="disqualified">Disqualified</option>
+                </Select>
+              </Field>
+              <div className="md:col-span-2">
+                <Field label="Upload Passbook / Cancelled Cheque" required>
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={set('bankProofFile')}
+                    required
+                    className="w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 transition"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">PDF, JPG, or PNG accepted</p>
+                </Field>
+              </div>
+            </div>
+
+            <div className="flex justify-between pt-4 border-t border-surface-100 mt-2">
+              <button type="button" onClick={() => setStep(2)} className="btn-secondary">← Back</button>
+              <button type="submit" disabled={submitting}
+                className="btn-primary min-w-[160px] flex items-center justify-center gap-2"
+              >
+                {submitting ? <><Loader2 size={15} className="animate-spin" />Registering…</> : 'Register Vendor'}
+              </button>
+            </div>
+          </div>
+        )}
+      </form>
+    </div>
+  )
+}

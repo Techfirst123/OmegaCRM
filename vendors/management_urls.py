@@ -1,7 +1,6 @@
 from django.urls import path
 
 from tasks import views as task_views
-from vendor_portal import views as vendor_portal_views
 
 from . import views
 
@@ -12,7 +11,6 @@ urlpatterns = [
     path('assignments/', views.vendor_assignment_list, name='vendor-auth-assignments'),
     path('assignments/bulk/', views.vendor_bulk_assignment, name='vendor-auth-bulk-assignment'),
     path('distribution/', views.vendor_distribution, name='vendor-auth-distribution'),
-    path('portal-access/', vendor_portal_views.vendor_portal_user_management, name='vendor-auth-portal-access'),
     path('history/', views.vendor_assignment_history, name='vendor-auth-history'),
     path('tasks/', task_views.vendor_task_center, name='vendor-auth-tasks'),
     path('tasks/<int:task_id>/status/', task_views.update_task_status, name='vendor-auth-task-status'),

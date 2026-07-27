@@ -10,6 +10,7 @@ from xml.etree import ElementTree as ET
 
 from django.conf import settings
 from django.contrib.auth import logout
+from django.contrib.auth.decorators import login_required
 from django.http import Http404
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -650,43 +651,72 @@ def _validate_vendor_payload(payload, files, require_file):
     return cleaned_data, errors
 
 
+@login_required(login_url='/admin/login/')
 def index(request):
-    projects = list(ProjectMaster.objects.prefetch_related('allocations').order_by('-created_at'))
-    dashboard_metrics = _build_project_dashboard_metrics(projects)
-    progress_rows = _serialize_project_progress_rows(projects)
-    total_mw = sum((project.total_mw or Decimal('0') for project in projects), Decimal('0'))
-    district_options = sorted({row['district'] for row in progress_rows if row['district']})
+    from permissions.utils import get_user_role, is_admin_like
+    from permissions.constants import ROLE_VENDOR_MANAGER, ROLE_PURCHASE_MANAGER, ROLE_PURCHASE_STAFF
+
+    role = get_user_role(request.user)
+    admin = is_admin_like(request.user)
+    vendor_focused = role in {ROLE_VENDOR_MANAGER, ROLE_PURCHASE_MANAGER, ROLE_PURCHASE_STAFF}
+
+    show_project_panel = not vendor_focused or admin
+    show_vendor_panel = vendor_focused or admin
+
     context = {
         'page_title': 'Dashboard',
-        'project_count': len(projects),
-        'total_mw': total_mw,
-        'running_mw': dashboard_metrics['status_totals'][PROJECT_STATUS_RUNNING],
-        'completed_mw': dashboard_metrics['status_totals'][PROJECT_STATUS_COMPLETED],
-        'aligned_mw': dashboard_metrics['status_totals'][PROJECT_STATUS_ALIGNED],
-        'status_summary_chart_data': json.dumps(
-            [
-                float(dashboard_metrics['status_totals'][PROJECT_STATUS_RUNNING]),
-                float(dashboard_metrics['status_totals'][PROJECT_STATUS_COMPLETED]),
-                float(dashboard_metrics['status_totals'][PROJECT_STATUS_ALIGNED]),
-            ]
-        ),
-        'country_chart_data': json.dumps(dashboard_metrics['country_chart']),
-        'state_chart_data': json.dumps(dashboard_metrics['state_chart']),
-        'district_chart_data': json.dumps(dashboard_metrics['district_chart']),
-        'progress_project_options': json.dumps([
-            {
-                'id': project.id,
-                'project_code': project.project_code or '',
-                'project_name': project.project_name or '',
-            }
-            for project in projects
-        ]),
-        'progress_district_options': json.dumps(district_options),
-        'project_progress_rows': json.dumps(progress_rows),
+        'show_project_panel': show_project_panel,
+        'show_vendor_panel': show_vendor_panel,
     }
+
+    if show_project_panel:
+        projects = list(ProjectMaster.objects.prefetch_related('allocations').order_by('-created_at'))
+        dashboard_metrics = _build_project_dashboard_metrics(projects)
+        progress_rows = _serialize_project_progress_rows(projects)
+        total_mw = sum((project.total_mw or Decimal('0') for project in projects), Decimal('0'))
+        district_options = sorted({row['district'] for row in progress_rows if row['district']})
+        context.update({
+            'project_count': len(projects),
+            'total_mw': total_mw,
+            'running_mw': dashboard_metrics['status_totals'][PROJECT_STATUS_RUNNING],
+            'completed_mw': dashboard_metrics['status_totals'][PROJECT_STATUS_COMPLETED],
+            'aligned_mw': dashboard_metrics['status_totals'][PROJECT_STATUS_ALIGNED],
+            'status_summary_chart_data': json.dumps(
+                [
+                    float(dashboard_metrics['status_totals'][PROJECT_STATUS_RUNNING]),
+                    float(dashboard_metrics['status_totals'][PROJECT_STATUS_COMPLETED]),
+                    float(dashboard_metrics['status_totals'][PROJECT_STATUS_ALIGNED]),
+                ]
+            ),
+            'country_chart_data': json.dumps(dashboard_metrics['country_chart']),
+            'state_chart_data': json.dumps(dashboard_metrics['state_chart']),
+            'district_chart_data': json.dumps(dashboard_metrics['district_chart']),
+            'progress_project_options': json.dumps([
+                {
+                    'id': project.id,
+                    'project_code': project.project_code or '',
+                    'project_name': project.project_name or '',
+                }
+                for project in projects
+            ]),
+            'progress_district_options': json.dumps(district_options),
+            'project_progress_rows': json.dumps(progress_rows),
+        })
+
+    if show_vendor_panel:
+        vendor_count = Vendor.objects.count()
+        recent_vendors = list(
+            Vendor.objects.order_by('-created_at')[:5].values('vendor_id', 'company_name', 'vendor_category')
+        )
+        context.update({
+            'vendor_count': vendor_count,
+            'recent_vendors': recent_vendors,
+        })
+
     return render(request, 'dashboard.html', context)
 
 
+@login_required(login_url='/admin/login/')
 def vendor_module(request):
     vendor_count = Vendor.objects.count()
     recent_count = Vendor.objects.order_by('-created_at')[:5].count()
@@ -699,6 +729,7 @@ def vendor_module(request):
     return render(request, 'vendor_module.html', context)
 
 
+@login_required(login_url='/admin/login/')
 def project_module(request):
     project_count = ProjectMaster.objects.count()
     active_count = ProjectMaster.objects.filter(status='active').count()
@@ -719,6 +750,7 @@ def project_module(request):
     return render(request, 'project_module.html', context)
 
 
+@login_required(login_url='/admin/login/')
 def project_master(request):
     projects = ProjectMaster.objects.order_by('-created_at')
     context = {
@@ -731,6 +763,7 @@ def project_master(request):
     return render(request, 'project_master.html', context)
 
 
+@login_required(login_url='/admin/login/')
 def project_distribution(request):
     projects = ProjectMaster.objects.order_by('-created_at')
     selected_project = projects.first()
@@ -758,6 +791,7 @@ def project_distribution(request):
     return render(request, 'project_distribution.html', context)
 
 
+@login_required(login_url='/admin/login/')
 def vendor_list(request):
     vendors = Vendor.objects.order_by('-created_at')
     context = {
@@ -769,10 +803,12 @@ def vendor_list(request):
     return render(request, 'vendor_list.html', context)
 
 
+@login_required(login_url='/admin/login/')
 def vendor_registration(request):
     return render(request, 'vendor_registration.html', {'page_title': 'Vendor Registration', 'vendor_module_nav': True})
 
 
+@login_required(login_url='/admin/login/')
 def vendor_planner(request):
     vendors = list(
         Vendor.objects.order_by('company_name').values('vendor_id', 'company_name', 'vendor_category')
@@ -790,6 +826,7 @@ def vendor_planner(request):
     return render(request, 'vendor_planner.html', context)
 
 
+@login_required(login_url='/admin/login/')
 def material_module(request):
     material_count = MaterialMaster.objects.count()
     work_type_count = WorkPackage.objects.filter(is_active=True).count()
@@ -806,6 +843,7 @@ def material_module(request):
     return render(request, 'material_module.html', context)
 
 
+@login_required(login_url='/admin/login/')
 @ensure_csrf_cookie
 def material_master(request):
     material_rows = _serialize_material_rows(MaterialMaster.objects.order_by('id'))
@@ -823,6 +861,7 @@ def material_master(request):
     return render(request, 'material_master.html', context)
 
 
+@login_required(login_url='/admin/login/')
 def material_quotation(request):
     vendors = list(
         Vendor.objects.order_by('company_name').values('vendor_id', 'company_name', 'vendor_category')
@@ -840,6 +879,7 @@ def material_quotation(request):
     return render(request, 'material_quotation.html', context)
 
 
+@login_required(login_url='/admin/login/')
 def import_material_master(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -921,6 +961,7 @@ def import_material_master(request):
     return JsonResponse({'message': 'Material list imported successfully', 'row_count': len(imported_rows)})
 
 
+@login_required(login_url='/admin/login/')
 def clear_material_import(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -928,6 +969,7 @@ def clear_material_import(request):
     return JsonResponse({'message': 'Imported material list cleared'})
 
 
+@login_required(login_url='/admin/login/')
 def update_material_work_package(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -954,6 +996,7 @@ def update_material_work_package(request):
     return JsonResponse({'message': 'Work package updated successfully'})
 
 
+@login_required(login_url='/admin/login/')
 def create_project_master(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -1015,6 +1058,7 @@ def create_project_master(request):
     })
 
 
+@login_required(login_url='/admin/login/')
 def save_project_distribution(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -1124,9 +1168,23 @@ def save_project_distribution(request):
     })
 
 
+@login_required(login_url='/admin/login/')
 def register_vendor(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
+
+    from permissions.utils import get_user_role, is_admin_like
+    from permissions.models import RolePermission
+
+    if not is_admin_like(request.user):
+        role = get_user_role(request.user)
+        if role:
+            perm = RolePermission.objects.filter(role=role, module_key='vendors').first()
+            if not perm or not perm.can_create:
+                return JsonResponse({'error': 'You do not have permission to register vendors.'}, status=403)
+        else:
+            return JsonResponse({'error': 'Access denied.'}, status=403)
+
     try:
         cleaned_data, errors = _validate_vendor_payload(request.POST, request.FILES, require_file=True)
         if errors:
@@ -1145,6 +1203,7 @@ def register_vendor(request):
         return JsonResponse({'error': 'server error'}, status=500)
 
 
+@login_required(login_url='/admin/login/')
 def update_vendor(request, vendor_id):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)

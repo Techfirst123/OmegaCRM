@@ -14,6 +14,7 @@
                 <p>Review the master list with vendor ID, company details, category, contact person, and status.</p>
             </a>
         </div>
+        {% if is_admin or user_perms.vendors.can_create %}
         <div class="col-lg-4">
             <a class="module-card module-card-large" href="{% url 'vendor-registration' %}">
                 <span class="module-label">Vendor Registration Form</span>
@@ -21,6 +22,7 @@
                 <p>Launch the multi-step registration form and generate the vendor ID after submission.</p>
             </a>
         </div>
+        {% endif %}
     </div>
 </section>
 

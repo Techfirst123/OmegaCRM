@@ -1,6 +1,62 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+{% if show_vendor_panel %}
+<section class="surface-panel mb-4">
+    <div class="section-heading dashboard-control-row">
+        <div>
+            <p class="hero-kicker">Vendor Operations</p>
+            <h2 class="hero-title mb-0">Manage your vendor network and procurement workflow.</h2>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            {% if is_admin or user_perms.vendors.can_create %}
+            <a href="{% url 'vendor-registration' %}" class="btn btn-primary btn-sm">Register New Vendor</a>
+            {% endif %}
+            <a href="{% url 'vendor-list' %}" class="btn btn-outline-primary btn-sm">View All Vendors</a>
+            <a href="{% url 'vendor-auth-dashboard' %}" class="btn btn-outline-secondary btn-sm">Vendor Authorization</a>
+            {% if is_admin or user_perms.purchase_orders.can_view %}
+            <a href="{% url 'procurement-dashboard' %}" class="btn btn-outline-secondary btn-sm">PO Tracking</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="hero-metrics mt-3">
+        <div class="metric-chip">
+            <span>Total Vendors</span>
+            <strong>{{ vendor_count }}</strong>
+        </div>
+        <div class="metric-chip">
+            <span>Recently Added</span>
+            <strong>{{ recent_vendors|length }}</strong>
+        </div>
+    </div>
+    {% if recent_vendors %}
+    <div class="mt-3">
+        <h4 class="section-title mb-2">Recent Registrations</h4>
+        <table class="table table-sm table-hover">
+            <thead>
+                <tr>
+                    <th>Vendor ID</th>
+                    <th>Company Name</th>
+                    <th>Category</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in recent_vendors %}
+                <tr>
+                    <td><code>{{ v.vendor_id }}</code></td>
+                    <td>{{ v.company_name }}</td>
+                    <td>{{ v.vendor_category }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if show_project_panel %}
 <section class="hero-panel">
     <div>
         <p class="hero-kicker">Project Intelligence</p>
@@ -30,7 +86,9 @@
         </div>
     </div>
 </section>
+{% endif %}
 
+{% if show_project_panel %}
 <section class="row g-4 mt-1">
     <div class="col-lg-4">
         <div class="surface-panel chart-panel">
@@ -109,10 +167,12 @@
         </div>
     </div>
 </section>
+{% endif %}
 
 {% endblock %}
 
 {% block scripts %}
+{% if show_project_panel %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
     const projectStatusSummaryData = JSON.parse(document.getElementById('project-status-summary-data').textContent);
@@ -441,4 +501,5 @@
     renderLocationChart();
     renderProgressCharts();
 </script>
+{% endif %}
 {% endblock %}

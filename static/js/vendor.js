@@ -877,12 +877,34 @@ function parseBankNameAndAddress(text) {
     };
 }
 
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+}
+
+async function ensureOcrLibs() {
+    await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+}
+
+async function ensurePdfLib() {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.js');
+}
+
 async function extractTextFromImage(file) {
+    await ensureOcrLibs();
     const result = await Tesseract.recognize(file, 'eng', { logger: () => {} });
     return result.data.text || '';
 }
 
 async function extractTextFromPdf(file) {
+    await ensurePdfLib();
+    await ensureOcrLibs();
     if (!window.pdfjsLib) throw new Error('PDF reader not available');
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = CONFIG.PDF_WORKER_URL;
 
@@ -997,6 +1019,14 @@ async function handleSubmit(e) {
             body: formData,
             headers: { 'X-CSRFToken': csrftoken }
         });
+
+        // If the response is HTML (login page redirect), session expired
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            showError('Your session has expired. Please refresh the page and log in again before submitting.');
+            return;
+        }
+
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) {
             showError(data.error || 'Failed to submit');
