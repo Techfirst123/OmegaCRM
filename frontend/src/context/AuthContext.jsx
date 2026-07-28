@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import api from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -7,32 +8,26 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const stored = localStorage.getItem('omega_erp_user')
-    if (stored) {
-      try { setUser(JSON.parse(stored)) } catch {}
-    }
-    setIsLoading(false)
+    let cancelled = false
+    api.get('/auth/session/')
+      .then(({ data }) => { if (!cancelled) setUser(data.user) })
+      .catch(() => { if (!cancelled) setUser(null) })
+      .finally(() => { if (!cancelled) setIsLoading(false) })
+    return () => { cancelled = true }
   }, [])
 
-  const login = async (username, password) => {
-    // Replace with real API call: await api.post('/auth/login/', { username, password })
-    if (!username || !password) throw new Error('Invalid credentials')
-    const mockUser = {
-      id: 1,
-      username,
-      fullName: 'Rajesh Kumar',
-      role: 'Procurement Manager',
-      email: `${username}@omega-erp.com`,
-      permissions: ['view_all', 'create_po', 'approve_payment'],
-    }
-    setUser(mockUser)
-    localStorage.setItem('omega_erp_user', JSON.stringify(mockUser))
-    return mockUser
+  const login = async (username, password, remember) => {
+    const { data } = await api.post('/auth/login/', { username, password, remember })
+    setUser(data.user)
+    return data.user
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem('omega_erp_user')
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout/')
+    } finally {
+      setUser(null)
+    }
   }
 
   return (

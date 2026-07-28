@@ -21,8 +21,11 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   r => r,
   err => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem('omega_erp_user')
+    // The session-check call is expected to 401 for logged-out users; let
+    // AuthContext/PrivateRoute handle that via client-side routing instead
+    // of forcing a hard reload here.
+    const isSessionCheck = err.config?.url?.includes('/auth/session/')
+    if (err.response?.status === 401 && !isSessionCheck && window.location.pathname !== '/login') {
       window.location.href = '/login'
     }
     return Promise.reject(err)

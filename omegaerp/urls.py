@@ -30,6 +30,9 @@ urlpatterns = [
     path('api/chat/', api_chat, name='api_chat'),
     path('api/search/', api_search, name='api_search'),
 
+    # Session auth API for the React app
+    path('api/auth/', include('accounts.urls')),
+
     # Django backend modules (templates + JSON endpoints)
     path('administration/', include('administration.urls')),
     path('procurement/', include('purchase_orders.urls')),

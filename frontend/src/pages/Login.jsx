@@ -7,6 +7,7 @@ export default function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ username: '', password: '' })
+  const [remember, setRemember] = useState(true)
   const [showPwd, setShowPwd] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -16,10 +17,10 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      await login(form.username, form.password)
+      await login(form.username, form.password, remember)
       navigate('/')
-    } catch {
-      setError('Invalid username or password. Please try again.')
+    } catch (err) {
+      setError(err.response?.data?.error || 'Invalid username or password. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -143,7 +144,12 @@ export default function Login() {
 
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" className="w-4 h-4 rounded border-surface-300 accent-brand-500" />
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded border-surface-300 accent-brand-500"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                />
                 <span className="text-sm text-slate-600">Keep me signed in</span>
               </label>
               <button type="button" className="text-sm text-brand-500 hover:text-brand-600 font-medium">
