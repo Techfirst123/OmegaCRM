@@ -85,6 +85,8 @@ class MaterialMaster(models.Model):
     lt_panels = models.CharField(max_length=255, blank=True)
     pf_rate = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
     amount = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True)
+    hsn_code = models.CharField(max_length=20, blank=True)
+    gst_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

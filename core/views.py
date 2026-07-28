@@ -1,11 +1,9 @@
 import datetime
 import json
-import re
 import traceback
 import zipfile
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation
-from io import BytesIO
+from decimal import Decimal
 from xml.etree import ElementTree as ET
 
 from django.conf import settings
@@ -16,6 +14,12 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+from .import_utils import (
+    load_xlsx_rows as _load_xlsx_rows,
+    normalize_header as _normalize_material_header,
+    to_decimal_or_none as _to_decimal_or_none,
+    to_int_or_none as _to_int_or_none,
+)
 from .material_catalog import DEFAULT_BUSINESS_UNITS, DEFAULT_WORK_PACKAGES, MATERIAL_IMPORT_SCHEMA
 from .models import (
     BusinessUnit,
@@ -51,10 +55,6 @@ PROJECT_STATUS_LABELS = {
 }
 
 
-def _normalize_material_header(value):
-    return re.sub(r'[^a-z0-9]+', '', str(value or '').lower())
-
-
 def _material_import_header_map():
     aliases = {
         'materialcode': 'material_code',
@@ -70,74 +70,6 @@ def _material_import_header_map():
         'amount': 'amount',
     }
     return aliases
-
-
-def _xlsx_column_to_index(column_ref):
-    index = 0
-    for char in column_ref:
-        if char.isalpha():
-            index = (index * 26) + (ord(char.upper()) - ord('A') + 1)
-    return max(index - 1, 0)
-
-
-def _load_xlsx_rows(uploaded_file):
-    uploaded_file.seek(0)
-    file_bytes = uploaded_file.read()
-    archive = zipfile.ZipFile(BytesIO(file_bytes))
-
-    workbook_tree = ET.fromstring(archive.read('xl/workbook.xml'))
-    workbook_rels_tree = ET.fromstring(archive.read('xl/_rels/workbook.xml.rels'))
-    ns_main = {'main': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
-    ns_rel = {'rel': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'}
-    ns_pkg = {'pkg': 'http://schemas.openxmlformats.org/package/2006/relationships'}
-
-    sheets = workbook_tree.find('main:sheets', ns_main)
-    if sheets is None or not list(sheets):
-        return []
-
-    first_sheet = list(sheets)[0]
-    relationship_id = first_sheet.attrib.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
-    rel_targets = {
-        rel.attrib.get('Id'): rel.attrib.get('Target')
-        for rel in workbook_rels_tree.findall('pkg:Relationship', ns_pkg)
-    }
-    sheet_target = rel_targets.get(relationship_id, 'worksheets/sheet1.xml')
-    sheet_path = f"xl/{sheet_target.lstrip('/')}" if not sheet_target.startswith('xl/') else sheet_target
-
-    shared_strings = []
-    if 'xl/sharedStrings.xml' in archive.namelist():
-        shared_tree = ET.fromstring(archive.read('xl/sharedStrings.xml'))
-        for string_item in shared_tree.findall('main:si', ns_main):
-            parts = [node.text or '' for node in string_item.findall('.//main:t', ns_main)]
-            shared_strings.append(''.join(parts))
-
-    sheet_tree = ET.fromstring(archive.read(sheet_path))
-    rows = []
-    for row_node in sheet_tree.findall('.//main:sheetData/main:row', ns_main):
-        cells = {}
-        max_index = -1
-        for cell in row_node.findall('main:c', ns_main):
-            cell_ref = cell.attrib.get('r', '')
-            col_ref = ''.join(char for char in cell_ref if char.isalpha())
-            col_index = _xlsx_column_to_index(col_ref)
-            max_index = max(max_index, col_index)
-            cell_type = cell.attrib.get('t')
-            if cell_type == 'inlineStr':
-                value = ''.join(node.text or '' for node in cell.findall('.//main:t', ns_main))
-            else:
-                value_node = cell.find('main:v', ns_main)
-                raw_value = value_node.text if value_node is not None else ''
-                if cell_type == 's':
-                    try:
-                        value = shared_strings[int(raw_value)]
-                    except (ValueError, IndexError):
-                        value = raw_value
-                else:
-                    value = raw_value
-            cells[col_index] = value
-        if max_index >= 0:
-            rows.append([cells.get(index, '') for index in range(max_index + 1)])
-    return rows
 
 
 def _build_material_import_rows(raw_rows):
@@ -160,29 +92,6 @@ def _material_code_for_index(index):
     return f"MAT{sequence:0{width}d}"
 
 
-def _to_decimal_or_none(value):
-    text = str(value or '').strip().replace(',', '')
-    if not text:
-        return None
-    try:
-        return Decimal(text)
-    except (InvalidOperation, ValueError):
-        return None
-
-
-def _to_int_or_none(value):
-    text = str(value or '').strip().replace(',', '')
-    if not text:
-        return None
-    try:
-        parsed = Decimal(text)
-    except (InvalidOperation, ValueError):
-        return None
-    if parsed != parsed.to_integral_value():
-        return None
-    return int(parsed)
-
-
 def _serialize_material_rows(queryset):
     rows = []
     for index, item in enumerate(queryset, start=1):
@@ -200,6 +109,8 @@ def _serialize_material_rows(queryset):
             'lt_panels': item.lt_panels or '',
             'pf_rate': '' if item.pf_rate is None else str(item.pf_rate),
             'amount': '' if item.amount is None else str(item.amount),
+            'hsn_code': item.hsn_code or '',
+            'gst_percentage': '' if item.gst_percentage is None else str(item.gst_percentage),
         })
     return rows
 
@@ -994,6 +905,51 @@ def update_material_work_package(request):
     material.work_package = work_package
     material.save(update_fields=['work_package'])
     return JsonResponse({'message': 'Work package updated successfully'})
+
+
+@login_required(login_url='/admin/login/')
+def material_list_api(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET required'}, status=405)
+    material_rows = _serialize_material_rows(MaterialMaster.objects.order_by('id'))
+    return JsonResponse({'rows': material_rows, 'count': len(material_rows)})
+
+
+@login_required(login_url='/admin/login/')
+def material_create_api(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+
+    material_name = (payload.get('material_name') or '').strip()
+    if not material_name:
+        return JsonResponse({'error': 'Material name is required'}, status=400)
+
+    qty = _to_int_or_none(payload.get('qty'))
+    if payload.get('qty') not in (None, '') and qty is None:
+        return JsonResponse({'error': 'Qty must be an integer value'}, status=400)
+
+    gst_percentage = _to_decimal_or_none(payload.get('gst_percentage'))
+    if payload.get('gst_percentage') not in (None, '') and gst_percentage is None:
+        return JsonResponse({'error': 'GST percentage must be a numeric value'}, status=400)
+
+    material = MaterialMaster.objects.create(
+        material_code=(payload.get('material_code') or '').strip(),
+        work_package=(payload.get('work_package') or '').strip(),
+        material_name=material_name,
+        specification=(payload.get('specification') or '').strip(),
+        qty=qty,
+        qty_specification=(payload.get('qty_specification') or '').strip(),
+        hsn_code=(payload.get('hsn_code') or '').strip(),
+        gst_percentage=gst_percentage,
+        pf_rate=_to_decimal_or_none(payload.get('pf_rate')),
+        amount=_to_decimal_or_none(payload.get('amount')),
+    )
+    material_rows = _serialize_material_rows(MaterialMaster.objects.filter(pk=material.pk))
+    return JsonResponse({'message': 'Material added successfully', 'material': material_rows[0]})
 
 
 @login_required(login_url='/admin/login/')
