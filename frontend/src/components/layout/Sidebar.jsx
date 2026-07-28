@@ -29,7 +29,7 @@ const navGroups = [
     items: [
       { label: 'Projects',         icon: FolderKanban, path: '/projects' },
       { label: 'Materials',        icon: Package,      path: '/materials' },
-      { label: 'Bulk PO Generator', icon: PackageSearch, path: '/materials/bulk-generator' },
+      { label: 'Bulk Quotation Generator', icon: PackageSearch, path: '/materials/bulk-quotation' },
       { label: 'Transport',        icon: ArrowLeftRight, path: '/transport' },
       { label: 'Tasks',            icon: ClipboardList, path: '/tasks' },
     ],

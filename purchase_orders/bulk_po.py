@@ -61,6 +61,8 @@ def check_bulk_rows(raw_rows):
             'unit': unit,
             'requested_qty': quantity,
             'available_qty': None,
+            'unit_rate': None,
+            'amount': None,
             'matched': False,
             'reason': '',
         }
@@ -74,6 +76,10 @@ def check_bulk_rows(raw_rows):
             candidates = _matching_materials(material_name, unit)
             available = sum((candidate.qty or 0) for candidate in candidates)
             result['available_qty'] = available
+            rate = candidates[0].pf_rate if candidates and candidates[0].pf_rate is not None else None
+            if rate is not None:
+                result['unit_rate'] = str(rate)
+                result['amount'] = str((rate * quantity).quantize(Decimal('0.01')))
             if not candidates:
                 result['reason'] = 'Material not found in inventory.'
             elif available < quantity:

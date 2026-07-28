@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Upload, Plus, Trash2, Loader2, AlertCircle, CheckCircle2, PackageSearch, FileCheck2,
+  Upload, Plus, Trash2, Loader2, AlertCircle, CheckCircle2, PackageSearch, ShieldCheck,
 } from 'lucide-react'
 
 function getCookie(name) {
@@ -57,13 +57,13 @@ const Textarea = (props) => (
   />
 )
 
-export default function BulkPOGenerator() {
+export default function BulkQuotationGenerator() {
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
 
   const [manualRows, setManualRows] = useState([emptyRow(), emptyRow(), emptyRow()])
-  const [checking, setChecking] = useState(false)
-  const [checkResult, setCheckResult] = useState(null) // { rows, all_matched }
+  const [verifying, setVerifying] = useState(false)
+  const [quotation, setQuotation] = useState(null) // { rows, all_matched }
   const [alert, setAlert] = useState(null)
 
   const [vendors, setVendors] = useState([])
@@ -87,6 +87,11 @@ export default function BulkPOGenerator() {
       .finally(() => setVendorsLoading(false))
   }, [])
 
+  const quotationTotal = useMemo(() => {
+    if (!quotation) return 0
+    return quotation.rows.reduce((sum, row) => sum + (row.amount ? parseFloat(row.amount) : 0), 0)
+  }, [quotation])
+
   const setPoField = (key) => (e) => setPoForm((f) => ({ ...f, [key]: e.target.value }))
 
   const updateManualRow = (index, key, value) => {
@@ -95,8 +100,8 @@ export default function BulkPOGenerator() {
   const addManualRow = () => setManualRows((rows) => [...rows, emptyRow()])
   const removeManualRow = (index) => setManualRows((rows) => rows.filter((_, i) => i !== index))
 
-  const runCheck = async (body, isFormData) => {
-    setChecking(true)
+  const runVerify = async (body, isFormData) => {
+    setVerifying(true)
     setAlert(null)
     try {
       const options = { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } }
@@ -108,27 +113,29 @@ export default function BulkPOGenerator() {
       }
       const res = await fetch(CHECK_URL, options)
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Could not check the product list against inventory.')
-      setCheckResult(data)
+      if (!res.ok) throw new Error(data.error || 'Could not verify the product list against inventory.')
+      setQuotation(data)
       const count = data.rows?.length || 0
       setAlert({
         type: data.all_matched ? 'success' : 'warning',
-        message: `Checked ${count} product${count === 1 ? '' : 's'} against inventory.`,
+        message: data.all_matched
+          ? `Verified ${count} product${count === 1 ? '' : 's'} — everything is available in inventory. You can generate the purchase order below.`
+          : `Verified ${count} product${count === 1 ? '' : 's'} — some items don't match inventory. Fix the list and verify again.`,
       })
     } catch (err) {
       setAlert({ type: 'error', message: err.message })
     } finally {
-      setChecking(false)
+      setVerifying(false)
     }
   }
 
-  const handleCheckManual = () => {
+  const handleVerifyManual = () => {
     const rows = manualRows.filter((r) => r.material_name || r.unit || r.quantity)
     if (!rows.length) {
       setAlert({ type: 'error', message: 'Add at least one product row first.' })
       return
     }
-    runCheck({ rows })
+    runVerify({ rows })
   }
 
   const handleFileChange = (e) => {
@@ -141,16 +148,16 @@ export default function BulkPOGenerator() {
     }
     const formData = new FormData()
     formData.append('materialFile', file)
-    runCheck(formData, true)
+    runVerify(formData, true)
   }
 
   const handleGenerate = async (e) => {
     e.preventDefault()
-    if (!checkResult?.all_matched) return
+    if (!quotation?.all_matched) return
     setGenerating(true)
     setGenerateError('')
     try {
-      const items = checkResult.rows.map((r) => ({
+      const items = quotation.rows.map((r) => ({
         material_name: r.material_name, unit: r.unit, quantity: r.requested_qty,
       }))
       const payload = { ...poForm, status: 'draft', items }
@@ -166,7 +173,7 @@ export default function BulkPOGenerator() {
           : ''
         throw new Error(data.error || fieldErrors || 'Could not generate the purchase order.')
       }
-      setSuccess({ po_number: data.po_number, item_count: checkResult.rows.length })
+      setSuccess({ po_number: data.po_number, item_count: quotation.rows.length })
     } catch (err) {
       setGenerateError(err.message)
     } finally {
@@ -176,7 +183,7 @@ export default function BulkPOGenerator() {
 
   const resetAll = () => {
     setManualRows([emptyRow(), emptyRow(), emptyRow()])
-    setCheckResult(null)
+    setQuotation(null)
     setAlert(null)
     setGenerateError('')
     setSuccess(null)
@@ -193,7 +200,7 @@ export default function BulkPOGenerator() {
       <div className="space-y-6 pb-4">
         <div className="page-header">
           <div>
-            <h2 className="page-title">Bulk PO Generator</h2>
+            <h2 className="page-title">Bulk Quotation Generator</h2>
             <p className="page-subtitle">Purchase order generated</p>
           </div>
         </div>
@@ -203,10 +210,10 @@ export default function BulkPOGenerator() {
           </div>
           <h3 className="text-lg font-bold text-slate-900">Purchase Order {success.po_number} generated</h3>
           <p className="text-sm text-slate-500">
-            {success.item_count} matched item{success.item_count === 1 ? '' : 's'} added and deducted from inventory.
+            {success.item_count} verified item{success.item_count === 1 ? '' : 's'} added and deducted from inventory.
           </p>
           <div className="flex gap-2 mt-2">
-            <button className="btn-primary" onClick={resetAll}>Generate Another</button>
+            <button className="btn-primary" onClick={resetAll}>Build Another Quotation</button>
             <button className="btn-secondary" onClick={() => navigate('/materials')}>Back to Materials</button>
           </div>
         </div>
@@ -218,9 +225,9 @@ export default function BulkPOGenerator() {
     <div className="space-y-6 pb-4">
       <div className="page-header">
         <div>
-          <h2 className="page-title">Bulk PO Generator</h2>
+          <h2 className="page-title">Bulk Quotation Generator</h2>
           <p className="page-subtitle">
-            Check a whole product list against inventory in one pass, then generate the purchase order only once everything matches.
+            Build a quotation from your product list, verify it against inventory, then generate the purchase order.
           </p>
         </div>
       </div>
@@ -243,9 +250,9 @@ export default function BulkPOGenerator() {
           </div>
           <p className="text-xs text-slate-500">Required columns: Material Name, Unit, Quantity</p>
           <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleFileChange} />
-          <button className="btn-primary w-full justify-center" disabled={checking} onClick={() => fileInputRef.current?.click()}>
-            {checking ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            Check File Against Inventory
+          <button className="btn-primary w-full justify-center" disabled={verifying} onClick={() => fileInputRef.current?.click()}>
+            {verifying ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+            Verify File
           </button>
         </div>
 
@@ -270,35 +277,43 @@ export default function BulkPOGenerator() {
           </div>
           <div className="flex gap-2">
             <button type="button" className="btn-secondary text-xs" onClick={addManualRow}><Plus size={13} />Add Row</button>
-            <button type="button" className="btn-primary text-xs ml-auto" disabled={checking} onClick={handleCheckManual}>
-              {checking ? <Loader2 size={13} className="animate-spin" /> : <FileCheck2 size={13} />}
-              Check List Against Inventory
+            <button type="button" className="btn-primary text-xs ml-auto" disabled={verifying} onClick={handleVerifyManual}>
+              {verifying ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
+              Verify List
             </button>
           </div>
         </div>
       </div>
 
       <div className="card overflow-hidden">
-        <div className="p-4 border-b border-surface-100">
-          <h3 className="font-semibold text-slate-800 text-sm">Inventory Match Results</h3>
+        <div className="p-4 border-b border-surface-100 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-800 text-sm">Quotation Details</h3>
+          {quotation && (
+            <span className={`badge text-xs ${quotation.all_matched ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+              {quotation.all_matched ? 'Verified' : 'Needs Attention'}
+            </span>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>
                 <th>Material Name</th><th>Unit</th><th className="text-right">Requested</th>
-                <th className="text-right">Available</th><th>Status</th>
+                <th className="text-right">Available</th><th className="text-right">Rate</th>
+                <th className="text-right">Amount</th><th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {!checkResult || checkResult.rows.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-8 text-slate-400">No products checked yet.</td></tr>
-              ) : checkResult.rows.map((row, i) => (
+              {!quotation || quotation.rows.length === 0 ? (
+                <tr><td colSpan={7} className="text-center py-8 text-slate-400">No products verified yet.</td></tr>
+              ) : quotation.rows.map((row, i) => (
                 <tr key={i}>
                   <td className="font-medium text-slate-800">{row.material_name || '-'}</td>
                   <td className="text-xs text-slate-500">{row.unit || '-'}</td>
                   <td className="text-right">{row.requested_qty ?? '-'}</td>
                   <td className="text-right">{row.available_qty ?? '-'}</td>
+                  <td className="text-right">{row.unit_rate ? `₹${row.unit_rate}` : '-'}</td>
+                  <td className="text-right font-semibold text-slate-900">{row.amount ? `₹${row.amount}` : '-'}</td>
                   <td>
                     <span className={`badge text-xs ${row.matched ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                       {row.matched ? 'Matched' : 'Not Matched'}
@@ -308,6 +323,17 @@ export default function BulkPOGenerator() {
                 </tr>
               ))}
             </tbody>
+            {quotation && quotation.rows.length > 0 && (
+              <tfoot>
+                <tr className="bg-surface-50">
+                  <td colSpan={5} className="text-right font-semibold text-slate-600">Total Quotation Value</td>
+                  <td className="text-right font-bold text-slate-900">
+                    ₹{quotationTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
@@ -315,7 +341,7 @@ export default function BulkPOGenerator() {
       <div className="card p-5 space-y-4">
         <h3 className="font-semibold text-slate-800 text-sm">Generate Purchase Order</h3>
         <p className="text-xs text-slate-500">
-          Fill in the PO header once every product above shows Matched. The button stays disabled until the whole list matches inventory.
+          Fill in the PO header once the quotation above is fully Verified. The button stays disabled until every product matches inventory.
         </p>
 
         {generateError && (
@@ -372,7 +398,7 @@ export default function BulkPOGenerator() {
           </Field>
 
           <div className="md:col-span-2 flex justify-end">
-            <button type="submit" className="btn-primary disabled:opacity-50" disabled={!checkResult?.all_matched || generating}>
+            <button type="submit" className="btn-primary disabled:opacity-50" disabled={!quotation?.all_matched || generating}>
               {generating ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
               Generate Purchase Order
             </button>

@@ -17,7 +17,7 @@ import ProjectList   from './pages/projects/ProjectList'
 import ProjectCreate from './pages/projects/ProjectCreate'
 import SolarSiteTracker from './pages/projects/SolarSiteTracker'
 import MaterialList  from './pages/materials/MaterialList'
-import BulkPOGenerator from './pages/materials/BulkPOGenerator'
+import BulkQuotationGenerator from './pages/materials/BulkQuotationGenerator'
 import TransportList from './pages/transport/TransportList'
 import TaskList      from './pages/tasks/TaskList'
 import ReportsList   from './pages/reports/ReportsList'
@@ -62,7 +62,7 @@ export default function App() {
             <Route path="projects/new"           element={<ProjectCreate />} />
             <Route path="projects/solar-tracker" element={<SolarSiteTracker />} />
             <Route path="materials"              element={<MaterialList />}  />
-            <Route path="materials/bulk-generator" element={<BulkPOGenerator />} />
+            <Route path="materials/bulk-quotation" element={<BulkQuotationGenerator />} />
             <Route path="transport"              element={<TransportList />} />
             <Route path="tasks"                  element={<TaskList />}      />
 
