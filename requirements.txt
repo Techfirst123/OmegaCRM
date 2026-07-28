@@ -7,8 +7,12 @@ vercel==0.5.9
 whitenoise==6.12.0
 
 # AI Assistant (OmegaChatbox)
-sentence-transformers>=2.2.2
-faiss-cpu
+# NOTE: sentence-transformers (pulls in PyTorch) and faiss-cpu are deliberately
+# NOT listed here — together they pushed the Vercel serverless bundle past the
+# 500MB function limit. Every import of them in search/ is function-scoped and
+# wrapped in try/except, so their absence degrades semantic search to
+# keyword-only search instead of breaking the app. Install them locally if you
+# need to run `manage.py ingest_documents` / `import_from_db`.
 PyPDF2>=3.0.0
 Pillow
 pgvector
