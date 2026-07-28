@@ -188,6 +188,13 @@ class PurchaseOrderItem(models.Model):
     ]
 
     po = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE, related_name='items')
+    material = models.ForeignKey(
+        'core.MaterialMaster',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='po_items',
+    )
     material_category = models.CharField(max_length=120)
     material_name = models.CharField(max_length=255)
     specification = models.TextField(blank=True)
@@ -217,7 +224,7 @@ class PurchaseOrderItem(models.Model):
     def save(self, *args, **kwargs):
         subtotal = (self.ordered_quantity or Decimal('0.00')) * (self.unit_rate or Decimal('0.00'))
         gst_multiplier = Decimal('1.00') + ((self.gst_percentage or Decimal('0.00')) / Decimal('100.00'))
-        self.total_amount = subtotal * gst_multiplier
+        self.total_amount = (subtotal * gst_multiplier).quantize(Decimal('0.01'))
         self.pending_quantity = max((self.ordered_quantity or Decimal('0.00')) - (self.delivered_quantity or Decimal('0.00')), Decimal('0.00'))
         if self.delivered_quantity <= 0:
             self.item_status = self.ITEM_STATUS_PENDING

@@ -129,7 +129,8 @@
             <nav class="module-subnav mb-4">
                 <a class="module-subnav-link {% if request.path == '/procurement/' %}active{% endif %}" href="{% url 'procurement-dashboard' %}">Overview</a>
                 <a class="module-subnav-link {% if request.path == '/procurement/vendors/' %}active{% endif %}" href="{% url 'procurement-vendor-master' %}">Vendor Master</a>
-                <a class="module-subnav-link {% if '/procurement/purchase-orders/' in request.path %}active{% endif %}" href="{% url 'purchase-order-master' %}">PO Master</a>
+                <a class="module-subnav-link {% if '/procurement/purchase-orders/' in request.path and 'bulk-generate' not in request.path %}active{% endif %}" href="{% url 'purchase-order-master' %}">PO Master</a>
+                <a class="module-subnav-link {% if 'bulk-generate' in request.path %}active{% endif %}" href="{% url 'purchase-order-bulk-generator' %}">Bulk PO Generator</a>
                 <a class="module-subnav-link {% if request.path == '/procurement/reports/' %}active{% endif %}" href="{% url 'procurement-reports' %}">Reports</a>
             </nav>
             {% endif %}

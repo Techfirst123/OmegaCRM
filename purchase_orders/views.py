@@ -1,6 +1,10 @@
 import json
+import zipfile
 from decimal import Decimal
+from xml.etree import ElementTree as ET
 
+from django.contrib import messages
+from django.db import transaction
 from django.db.models import Count, F, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -9,6 +13,7 @@ from django.utils import timezone
 
 from administration.models import SystemAuditLog
 from administration.services import log_system_audit
+from core.import_utils import load_xlsx_rows, normalize_header
 from deliveries.forms import DeliveryForm, DeliveryInvoiceChallanForm
 from deliveries.models import Delivery, DeliveryInvoiceChallan
 from documents.forms import BusinessDocumentForm, NotificationLogForm
@@ -20,6 +25,7 @@ from payments.models import VendorPayment
 from transport.forms import VehicleMovementForm
 from transport.models import VehicleMovement
 
+from .bulk_po import check_bulk_rows, deduct_material_stock
 from .forms import (
     PurchaseOrderActivityLogForm,
     PurchaseOrderForm,
@@ -28,6 +34,21 @@ from .forms import (
 )
 from .models import PurchaseOrder, PurchaseOrderActivityLog, PurchaseOrderItem, PurchaseOrderReferenceCode
 from .serializers import serialize_purchase_order
+
+BULK_PO_REQUIRED_COLUMNS = ('material_name', 'unit', 'quantity')
+BULK_PO_HEADER_ALIASES = {
+    'materialname': 'material_name',
+    'material': 'material_name',
+    'productname': 'material_name',
+    'product': 'material_name',
+    'unit': 'unit',
+    'qtyspecification': 'unit',
+    'uom': 'unit',
+    'quantity': 'quantity',
+    'qty': 'quantity',
+    'requiredqty': 'quantity',
+    'requiredquantity': 'quantity',
+}
 
 
 def _log_activity(po, action, description, actor=None, metadata=None):
@@ -201,6 +222,148 @@ def purchase_order_master(request):
         'po_status_choices': PurchaseOrder.STATUS_CHOICES,
     }
     return render(request, 'procurement_po_master.html', context)
+
+
+def _parse_bulk_check_request(request):
+    """Returns (raw_rows, error_response). raw_rows is a list of
+    {material_name, unit, quantity} dicts pulled from either an uploaded
+    .xlsx file (field name 'materialFile') or a JSON body {"rows": [...]}."""
+    if 'materialFile' in request.FILES:
+        uploaded_file = request.FILES['materialFile']
+        filename = (uploaded_file.name or '').lower()
+        if not filename.endswith('.xlsx'):
+            return None, JsonResponse({'error': 'Please upload the product list in .xlsx format'}, status=400)
+        try:
+            xlsx_rows = load_xlsx_rows(uploaded_file)
+        except (KeyError, zipfile.BadZipFile, ET.ParseError):
+            return None, JsonResponse({'error': 'Could not read the Excel file. Please upload a valid .xlsx file'}, status=400)
+        if not xlsx_rows:
+            return None, JsonResponse({'error': 'The uploaded Excel sheet is empty'}, status=400)
+
+        headers = xlsx_rows[0]
+        data_rows = [row for row in xlsx_rows[1:] if any(str(cell or '').strip() for cell in row)]
+
+        header_keys = []
+        for header in headers:
+            key = BULK_PO_HEADER_ALIASES.get(normalize_header(header))
+            if not key:
+                return None, JsonResponse({'error': f'Unexpected column found: {header or "blank"}'}, status=400)
+            header_keys.append(key)
+        missing = [column for column in BULK_PO_REQUIRED_COLUMNS if column not in header_keys]
+        if missing:
+            return None, JsonResponse({'error': f'Missing required columns: {", ".join(missing)}'}, status=400)
+
+        raw_rows = []
+        for raw_row in data_rows:
+            row_dict = {key: '' for key in BULK_PO_REQUIRED_COLUMNS}
+            for index, key in enumerate(header_keys):
+                value = raw_row[index] if index < len(raw_row) else ''
+                row_dict[key] = '' if value is None else str(value).strip()
+            if any(row_dict.values()):
+                raw_rows.append(row_dict)
+        if not raw_rows:
+            return None, JsonResponse({'error': 'No product rows found in the uploaded file'}, status=400)
+        return raw_rows, None
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return None, JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+    raw_rows = payload.get('rows') or []
+    if not raw_rows:
+        return None, JsonResponse({'error': 'Add at least one product row to check.'}, status=400)
+    return raw_rows, None
+
+
+def purchase_order_bulk_check(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    raw_rows, error_response = _parse_bulk_check_request(request)
+    if error_response:
+        return error_response
+
+    result_rows, all_matched = check_bulk_rows(raw_rows)
+    return JsonResponse({'rows': result_rows, 'all_matched': all_matched})
+
+
+def purchase_order_bulk_generator(request):
+    form = PurchaseOrderForm(prefix='po')
+    bulk_rows = []
+    items_payload = '[]'
+    all_matched = False
+
+    if request.method == 'POST':
+        try:
+            raw_rows = json.loads(request.POST.get('items_payload') or '[]')
+        except json.JSONDecodeError:
+            raw_rows = []
+        items_payload = request.POST.get('items_payload') or '[]'
+
+        bulk_rows, all_matched = check_bulk_rows(raw_rows) if raw_rows else ([], False)
+        form = PurchaseOrderForm(request.POST, request.FILES, prefix='po')
+
+        if not raw_rows:
+            messages.error(request, 'Check a product list against inventory before generating a purchase order.')
+        elif not all_matched:
+            messages.error(
+                request,
+                'Some products in the list do not match inventory (missing or insufficient stock). '
+                'Fix the list before generating a purchase order.',
+            )
+        elif form.is_valid():
+            with transaction.atomic():
+                po = form.save(commit=False)
+                if request.user.is_authenticated:
+                    po.created_by = request.user
+                po.save()
+
+                for row in bulk_rows:
+                    material = deduct_material_stock(row['material_name'], row['unit'], row['requested_qty'])
+                    unit_rate = (material.pf_rate if material and material.pf_rate is not None else None) or Decimal('0.00')
+                    PurchaseOrderItem.objects.create(
+                        po=po,
+                        material=material,
+                        material_category=(material.work_package if material and material.work_package else 'Bulk Import'),
+                        material_name=row['material_name'],
+                        unit=row['unit'],
+                        ordered_quantity=row['requested_qty'],
+                        unit_rate=unit_rate,
+                    )
+
+                po.refresh_progress()
+                _log_activity(
+                    po,
+                    'po_created',
+                    f'Purchase order generated from bulk inventory match ({len(bulk_rows)} items).',
+                    request.user,
+                    {'po_number': po.po_number, 'item_count': len(bulk_rows)},
+                )
+                _log_system_po_event(
+                    request.user,
+                    SystemAuditLog.ACTION_PO_CHANGE,
+                    'purchase_orders',
+                    f'Bulk-generated purchase order {po.po_number} from inventory match.',
+                    po,
+                )
+                log_vendor_activity(
+                    po.vendor,
+                    VendorActivityLog.TYPE_PO_CREATED,
+                    f'Purchase order {po.po_number} created for {po.project_site_name} via bulk inventory match.',
+                    request.user,
+                )
+            messages.success(request, f'Purchase order {po.po_number} generated with {len(bulk_rows)} matched items.')
+            return redirect('purchase-order-detail', pk=po.pk)
+
+    context = {
+        'page_title': 'Bulk Inventory PO Generator',
+        'procurement_nav': True,
+        'po_form': form,
+        'bulk_rows': bulk_rows,
+        'items_payload': items_payload,
+        'all_matched': all_matched,
+    }
+    return render(request, 'purchase_order_bulk_generator.html', context)
 
 
 def purchase_order_detail(request, pk):
