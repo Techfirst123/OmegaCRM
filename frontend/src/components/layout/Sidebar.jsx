@@ -5,7 +5,7 @@ import clsx from 'clsx'
 import {
   LayoutDashboard, Building2, ShoppingCart, Truck, CreditCard,
   FolderKanban, Package, BarChart3, Settings, LogOut, Zap,
-  ChevronRight, ArrowLeftRight, Bell, ClipboardList, Sparkles,
+  ChevronRight, ArrowLeftRight, Bell, ClipboardList, Sparkles, PackageSearch,
 } from 'lucide-react'
 
 const navGroups = [
@@ -29,6 +29,7 @@ const navGroups = [
     items: [
       { label: 'Projects',         icon: FolderKanban, path: '/projects' },
       { label: 'Materials',        icon: Package,      path: '/materials' },
+      { label: 'Bulk PO Generator', icon: PackageSearch, path: '/materials/bulk-generator' },
       { label: 'Transport',        icon: ArrowLeftRight, path: '/transport' },
       { label: 'Tasks',            icon: ClipboardList, path: '/tasks' },
     ],
@@ -53,8 +54,11 @@ export default function Sidebar() {
   const { user, logout } = useAuth()
   const location = useLocation()
 
-  const isActive = (path) =>
-    path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)
+  const allPaths = navGroups.flatMap((group) => group.items.map((item) => item.path))
+  const bestMatch = allPaths
+    .filter((path) => (path === '/' ? location.pathname === '/' : location.pathname.startsWith(path)))
+    .sort((a, b) => b.length - a.length)[0]
+  const isActive = (path) => path === bestMatch
 
   return (
     <div className="fixed inset-y-0 left-0 w-64 bg-brand-900 flex flex-col z-30 shadow-sidebar">

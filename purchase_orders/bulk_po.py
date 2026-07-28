@@ -1,5 +1,22 @@
+from decimal import Decimal
+
+from django.db import transaction
+
 from core.import_utils import to_int_or_none
 from core.models import MaterialMaster
+
+
+class BulkPOError(Exception):
+    """Raised when a bulk PO generation request can't proceed.
+
+    `rows` carries the freshly re-checked match results (if any) so the
+    caller can show the user exactly what failed without a second request.
+    """
+
+    def __init__(self, message, rows=None):
+        super().__init__(message)
+        self.message = message
+        self.rows = rows or []
 
 
 def _clean_text(value):
@@ -93,3 +110,50 @@ def deduct_material_stock(material_name, unit, quantity):
         if primary_material is None:
             primary_material = material
     return primary_material
+
+
+def generate_purchase_order(form, raw_rows, user):
+    """Create a PurchaseOrder + items from an already-valid `form` and a raw
+    bulk-checked product list, deducting matched inventory atomically.
+
+    `form` must be a bound, already-`is_valid()`-checked PurchaseOrderForm —
+    header field validation is the caller's job (it differs between the
+    classic multipart form and the JSON API). This function re-validates the
+    items against current stock itself rather than trusting the caller, and
+    raises BulkPOError (without writing anything) if they don't all match.
+    """
+    from .models import PurchaseOrderItem
+
+    if not raw_rows:
+        raise BulkPOError('Add at least one product row and check it against inventory first.')
+
+    bulk_rows, all_matched = check_bulk_rows(raw_rows)
+    if not all_matched:
+        raise BulkPOError(
+            'Some products in the list do not match inventory (missing or insufficient stock). '
+            'Fix the list before generating a purchase order.',
+            rows=bulk_rows,
+        )
+
+    with transaction.atomic():
+        po = form.save(commit=False)
+        if getattr(user, 'is_authenticated', False):
+            po.created_by = user
+        po.save()
+
+        for row in bulk_rows:
+            material = deduct_material_stock(row['material_name'], row['unit'], row['requested_qty'])
+            unit_rate = (material.pf_rate if material and material.pf_rate is not None else None) or Decimal('0.00')
+            PurchaseOrderItem.objects.create(
+                po=po,
+                material=material,
+                material_category=(material.work_package if material and material.work_package else 'Bulk Import'),
+                material_name=row['material_name'],
+                unit=row['unit'],
+                ordered_quantity=row['requested_qty'],
+                unit_rate=unit_rate,
+            )
+
+        po.refresh_progress()
+
+    return po, bulk_rows

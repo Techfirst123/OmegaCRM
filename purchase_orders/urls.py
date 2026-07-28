@@ -10,4 +10,6 @@ urlpatterns = [
     path('purchase-orders/<int:pk>/', views.purchase_order_detail, name='purchase-order-detail'),
     path('api/dashboard/', views.purchase_order_dashboard_api, name='purchase-order-dashboard-api'),
     path('api/purchase-orders/<int:pk>/', views.purchase_order_detail_api, name='purchase-order-detail-api'),
+    path('api/vendors/', views.purchase_order_vendor_options_api, name='purchase-order-vendor-options-api'),
+    path('api/bulk-generate/', views.purchase_order_bulk_generate_api, name='purchase-order-bulk-generate-api'),
 ]

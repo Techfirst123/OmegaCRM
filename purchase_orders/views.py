@@ -4,7 +4,6 @@ from decimal import Decimal
 from xml.etree import ElementTree as ET
 
 from django.contrib import messages
-from django.db import transaction
 from django.db.models import Count, F, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -25,7 +24,7 @@ from payments.models import VendorPayment
 from transport.forms import VehicleMovementForm
 from transport.models import VehicleMovement
 
-from .bulk_po import check_bulk_rows, deduct_material_stock
+from .bulk_po import BulkPOError, check_bulk_rows, generate_purchase_order
 from .forms import (
     PurchaseOrderActivityLogForm,
     PurchaseOrderForm,
@@ -300,8 +299,8 @@ def purchase_order_bulk_generator(request):
             raw_rows = []
         items_payload = request.POST.get('items_payload') or '[]'
 
-        bulk_rows, all_matched = check_bulk_rows(raw_rows) if raw_rows else ([], False)
         form = PurchaseOrderForm(request.POST, request.FILES, prefix='po')
+        bulk_rows, all_matched = check_bulk_rows(raw_rows) if raw_rows else ([], False)
 
         if not raw_rows:
             messages.error(request, 'Check a product list against inventory before generating a purchase order.')
@@ -312,26 +311,13 @@ def purchase_order_bulk_generator(request):
                 'Fix the list before generating a purchase order.',
             )
         elif form.is_valid():
-            with transaction.atomic():
-                po = form.save(commit=False)
-                if request.user.is_authenticated:
-                    po.created_by = request.user
-                po.save()
-
-                for row in bulk_rows:
-                    material = deduct_material_stock(row['material_name'], row['unit'], row['requested_qty'])
-                    unit_rate = (material.pf_rate if material and material.pf_rate is not None else None) or Decimal('0.00')
-                    PurchaseOrderItem.objects.create(
-                        po=po,
-                        material=material,
-                        material_category=(material.work_package if material and material.work_package else 'Bulk Import'),
-                        material_name=row['material_name'],
-                        unit=row['unit'],
-                        ordered_quantity=row['requested_qty'],
-                        unit_rate=unit_rate,
-                    )
-
-                po.refresh_progress()
+            try:
+                po, bulk_rows = generate_purchase_order(form, raw_rows, request.user)
+            except BulkPOError as exc:
+                bulk_rows = exc.rows
+                all_matched = False
+                messages.error(request, exc.message)
+            else:
                 _log_activity(
                     po,
                     'po_created',
@@ -352,8 +338,8 @@ def purchase_order_bulk_generator(request):
                     f'Purchase order {po.po_number} created for {po.project_site_name} via bulk inventory match.',
                     request.user,
                 )
-            messages.success(request, f'Purchase order {po.po_number} generated with {len(bulk_rows)} matched items.')
-            return redirect('purchase-order-detail', pk=po.pk)
+                messages.success(request, f'Purchase order {po.po_number} generated with {len(bulk_rows)} matched items.')
+                return redirect('purchase-order-detail', pk=po.pk)
 
     context = {
         'page_title': 'Bulk Inventory PO Generator',
@@ -364,6 +350,61 @@ def purchase_order_bulk_generator(request):
         'all_matched': all_matched,
     }
     return render(request, 'purchase_order_bulk_generator.html', context)
+
+
+def purchase_order_vendor_options_api(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET required'}, status=405)
+    from core.models import Vendor
+    vendors = Vendor.objects.order_by('company_name').values('id', 'vendor_id', 'company_name')
+    return JsonResponse({'results': list(vendors)})
+
+
+def purchase_order_bulk_generate_api(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+
+    raw_rows = payload.get('items') or []
+    form_data = {key: value for key, value in payload.items() if key != 'items'}
+    form = PurchaseOrderForm(data=form_data)
+
+    if not form.is_valid():
+        return JsonResponse({'error': 'Fix the purchase order details.', 'field_errors': form.errors}, status=400)
+
+    try:
+        po, bulk_rows = generate_purchase_order(form, raw_rows, request.user)
+    except BulkPOError as exc:
+        return JsonResponse({'error': exc.message, 'rows': exc.rows}, status=400)
+
+    _log_activity(
+        po,
+        'po_created',
+        f'Purchase order generated from bulk inventory match ({len(bulk_rows)} items).',
+        request.user,
+        {'po_number': po.po_number, 'item_count': len(bulk_rows)},
+    )
+    _log_system_po_event(
+        request.user,
+        SystemAuditLog.ACTION_PO_CHANGE,
+        'purchase_orders',
+        f'Bulk-generated purchase order {po.po_number} from inventory match.',
+        po,
+    )
+    log_vendor_activity(
+        po.vendor,
+        VendorActivityLog.TYPE_PO_CREATED,
+        f'Purchase order {po.po_number} created for {po.project_site_name} via bulk inventory match.',
+        request.user,
+    )
+    return JsonResponse({
+        'message': f'Purchase order {po.po_number} generated with {len(bulk_rows)} matched items.',
+        'po_id': po.pk,
+        'po_number': po.po_number,
+    })
 
 
 def purchase_order_detail(request, pk):
