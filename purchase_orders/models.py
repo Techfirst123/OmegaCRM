@@ -302,3 +302,66 @@ class PurchaseOrderActivityLog(models.Model):
 
     def __str__(self):
         return f'{self.po.po_number} - {self.action}'
+
+
+class Quotation(models.Model):
+    QUOTATION_PREFIX = 'QTN'
+
+    STATUS_DRAFT = 'draft'
+    STATUS_VERIFIED = 'verified'
+    STATUS_CONVERTED = 'converted'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_VERIFIED, 'Verified'),
+        (STATUS_CONVERTED, 'Converted to PO'),
+    ]
+
+    quotation_number = models.CharField(max_length=50, unique=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quotations',
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    purchase_order = models.OneToOneField(
+        PurchaseOrder,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='source_quotation',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return self.quotation_number or f'Quotation #{self.pk}'
+
+    def save(self, *args, **kwargs):
+        creating = self.pk is None
+        super().save(*args, **kwargs)
+        if creating and not self.quotation_number:
+            self.quotation_number = f'{self.QUOTATION_PREFIX}{str(self.pk).zfill(4)}'
+            super().save(update_fields=['quotation_number'])
+
+    @property
+    def is_locked(self):
+        return self.status == self.STATUS_CONVERTED
+
+
+class QuotationItem(models.Model):
+    quotation = models.ForeignKey(Quotation, on_delete=models.CASCADE, related_name='items')
+    material_name = models.CharField(max_length=255)
+    unit = models.CharField(max_length=100)
+    quantity = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return f'{self.quotation.quotation_number} - {self.material_name}'
