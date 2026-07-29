@@ -1,9 +1,65 @@
+import re
 from decimal import Decimal
 
 from django.db import transaction
 
 from core.import_utils import to_int_or_none
 from core.models import MaterialMaster
+
+_PDF_ROW_SPLIT_RE = re.compile(r'\t+|\s{2,}|,')
+_NUMERIC_RE = re.compile(r'^-?\d+(\.\d+)?$')
+
+
+def parse_pdf_text_to_rows(text):
+    """Best-effort extraction of {material_name, unit, quantity} rows from
+    plain text pulled out of a PDF (e.g. via PyPDF2).
+
+    PDF text extraction loses table/column structure, so this only handles
+    lines that still look tabular once split on generous whitespace/commas,
+    with a trailing numeric quantity. Lines that don't fit (headers, wrapped
+    text, prose) are silently skipped rather than guessed at — the caller's
+    normal inventory-check step will surface anything that didn't come
+    through as a "not matched" row the user can fix manually.
+    """
+    rows = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        row = _parse_pdf_line(line)
+        if row:
+            rows.append(row)
+    return rows
+
+
+def _parse_pdf_line(line):
+    parts = [part.strip() for part in _PDF_ROW_SPLIT_RE.split(line) if part.strip()]
+    if len(parts) >= 2:
+        quantity_candidate = parts[-1].replace(',', '')
+        if _NUMERIC_RE.match(quantity_candidate):
+            if len(parts) >= 3:
+                material_name = ' '.join(parts[:-2])
+                unit = parts[-2]
+            else:
+                material_name = parts[0]
+                unit = 'Nos'
+            if material_name:
+                return {'material_name': material_name, 'unit': unit, 'quantity': quantity_candidate}
+
+    # Fallback for rows where columns weren't separated by wide gaps (e.g. a
+    # unit like "350 kw" sitting right up against the quantity with only a
+    # single space). Split on any whitespace and take the last token as
+    # quantity, the one before it as unit — an imperfect guess, but the
+    # inventory-check step will flag it as "not matched" if it's wrong.
+    tokens = line.split()
+    if len(tokens) >= 3:
+        quantity_candidate = tokens[-1].replace(',', '')
+        if _NUMERIC_RE.match(quantity_candidate):
+            material_name = ' '.join(tokens[:-2])
+            unit = tokens[-2]
+            if material_name:
+                return {'material_name': material_name, 'unit': unit, 'quantity': quantity_candidate}
+    return None
 
 
 class BulkPOError(Exception):

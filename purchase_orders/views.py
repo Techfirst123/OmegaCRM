@@ -24,7 +24,7 @@ from payments.models import VendorPayment
 from transport.forms import VehicleMovementForm
 from transport.models import VehicleMovement
 
-from .bulk_po import BulkPOError, check_bulk_rows, generate_purchase_order
+from .bulk_po import BulkPOError, check_bulk_rows, generate_purchase_order, parse_pdf_text_to_rows
 from .forms import (
     PurchaseOrderActivityLogForm,
     PurchaseOrderForm,
@@ -223,46 +223,82 @@ def purchase_order_master(request):
     return render(request, 'procurement_po_master.html', context)
 
 
+def _parse_bulk_check_xlsx(uploaded_file):
+    try:
+        xlsx_rows = load_xlsx_rows(uploaded_file)
+    except (KeyError, zipfile.BadZipFile, ET.ParseError):
+        return None, JsonResponse({'error': 'Could not read the Excel file. Please upload a valid .xlsx file'}, status=400)
+    if not xlsx_rows:
+        return None, JsonResponse({'error': 'The uploaded Excel sheet is empty'}, status=400)
+
+    headers = xlsx_rows[0]
+    data_rows = [row for row in xlsx_rows[1:] if any(str(cell or '').strip() for cell in row)]
+
+    header_keys = []
+    for header in headers:
+        key = BULK_PO_HEADER_ALIASES.get(normalize_header(header))
+        if not key:
+            return None, JsonResponse({'error': f'Unexpected column found: {header or "blank"}'}, status=400)
+        header_keys.append(key)
+    missing = [column for column in BULK_PO_REQUIRED_COLUMNS if column not in header_keys]
+    if missing:
+        return None, JsonResponse({'error': f'Missing required columns: {", ".join(missing)}'}, status=400)
+
+    raw_rows = []
+    for raw_row in data_rows:
+        row_dict = {key: '' for key in BULK_PO_REQUIRED_COLUMNS}
+        for index, key in enumerate(header_keys):
+            value = raw_row[index] if index < len(raw_row) else ''
+            row_dict[key] = '' if value is None else str(value).strip()
+        if any(row_dict.values()):
+            raw_rows.append(row_dict)
+    if not raw_rows:
+        return None, JsonResponse({'error': 'No product rows found in the uploaded file'}, status=400)
+    return raw_rows, None
+
+
+def _parse_bulk_check_pdf(uploaded_file):
+    try:
+        from PyPDF2 import PdfReader
+    except ImportError:
+        return None, JsonResponse({'error': 'PDF import is not available in this environment.'}, status=400)
+
+    uploaded_file.seek(0)
+    try:
+        reader = PdfReader(uploaded_file)
+        text = '\n'.join((page.extract_text() or '') for page in reader.pages)
+    except Exception:
+        return None, JsonResponse({'error': 'Could not read the PDF file. Please upload a valid PDF.'}, status=400)
+
+    raw_rows = parse_pdf_text_to_rows(text)
+    if not raw_rows:
+        return None, JsonResponse({
+            'error': 'Could not find any product rows in the PDF. PDF parsing only works on text-based '
+                     'PDFs with a clear table (Material Name / Unit / Quantity per line) — scanned or '
+                     'photographed pages are not supported. Try an .xlsx file or enter products manually.',
+        }, status=400)
+    return raw_rows, None
+
+
 def _parse_bulk_check_request(request):
     """Returns (raw_rows, error_response). raw_rows is a list of
     {material_name, unit, quantity} dicts pulled from either an uploaded
-    .xlsx file (field name 'materialFile') or a JSON body {"rows": [...]}."""
+    file (field name 'materialFile', .xlsx or .pdf) or a JSON body
+    {"rows": [...]}."""
     if 'materialFile' in request.FILES:
         uploaded_file = request.FILES['materialFile']
         filename = (uploaded_file.name or '').lower()
-        if not filename.endswith('.xlsx'):
-            return None, JsonResponse({'error': 'Please upload the product list in .xlsx format'}, status=400)
-        try:
-            xlsx_rows = load_xlsx_rows(uploaded_file)
-        except (KeyError, zipfile.BadZipFile, ET.ParseError):
-            return None, JsonResponse({'error': 'Could not read the Excel file. Please upload a valid .xlsx file'}, status=400)
-        if not xlsx_rows:
-            return None, JsonResponse({'error': 'The uploaded Excel sheet is empty'}, status=400)
-
-        headers = xlsx_rows[0]
-        data_rows = [row for row in xlsx_rows[1:] if any(str(cell or '').strip() for cell in row)]
-
-        header_keys = []
-        for header in headers:
-            key = BULK_PO_HEADER_ALIASES.get(normalize_header(header))
-            if not key:
-                return None, JsonResponse({'error': f'Unexpected column found: {header or "blank"}'}, status=400)
-            header_keys.append(key)
-        missing = [column for column in BULK_PO_REQUIRED_COLUMNS if column not in header_keys]
-        if missing:
-            return None, JsonResponse({'error': f'Missing required columns: {", ".join(missing)}'}, status=400)
-
-        raw_rows = []
-        for raw_row in data_rows:
-            row_dict = {key: '' for key in BULK_PO_REQUIRED_COLUMNS}
-            for index, key in enumerate(header_keys):
-                value = raw_row[index] if index < len(raw_row) else ''
-                row_dict[key] = '' if value is None else str(value).strip()
-            if any(row_dict.values()):
-                raw_rows.append(row_dict)
-        if not raw_rows:
-            return None, JsonResponse({'error': 'No product rows found in the uploaded file'}, status=400)
-        return raw_rows, None
+        if filename.endswith('.xlsx'):
+            return _parse_bulk_check_xlsx(uploaded_file)
+        if filename.endswith('.pdf'):
+            return _parse_bulk_check_pdf(uploaded_file)
+        if filename.endswith(('.png', '.jpg', '.jpeg')):
+            return None, JsonResponse({
+                'error': 'Image (PNG/JPG) import needs OCR (text recognition), which is not set up in this '
+                         'deployment yet. Please use a PDF with selectable text, an Excel (.xlsx) file, or '
+                         'enter products manually.',
+            }, status=400)
+        return None, JsonResponse({'error': 'Please upload the product list as .xlsx or .pdf'}, status=400)
 
     try:
         payload = json.loads(request.body.decode('utf-8') or '{}')
