@@ -22,4 +22,5 @@ urlpatterns = [
         quotation_views.quotation_generate_po_api,
         name='quotation-generate-po-api',
     ),
+    path('api/quotations/<int:pk>/pdf/', quotation_views.quotation_pdf_api, name='quotation-pdf-api'),
 ]

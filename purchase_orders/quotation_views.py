@@ -229,3 +229,72 @@ def quotation_generate_po_api(request, pk):
         'po_id': po.pk,
         'po_number': po.po_number,
     })
+
+
+def quotation_pdf_api(request, pk):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET required'}, status=405)
+    quotation = get_object_or_404(Quotation, pk=pk)
+
+    from decimal import Decimal
+    from io import BytesIO
+
+    from django.http import HttpResponse
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    checked_rows, _all_matched = check_bulk_rows(_quotation_raw_rows(quotation))
+    styles = getSampleStyleSheet()
+
+    elements = [
+        Paragraph('OmegaERP', styles['Title']),
+        Paragraph('Material Quotation', styles['Heading2']),
+        Spacer(1, 6 * mm),
+        Paragraph(f'Quotation No.: {quotation.quotation_number}', styles['Normal']),
+        Paragraph(f"Date: {quotation.created_at.strftime('%d %b %Y')}", styles['Normal']),
+        Paragraph(f'Status: {quotation.get_status_display()}', styles['Normal']),
+    ]
+    if quotation.purchase_order_id:
+        elements.append(Paragraph(f'Purchase Order: {quotation.purchase_order.po_number}', styles['Normal']))
+    elements.append(Spacer(1, 8 * mm))
+
+    table_data = [['Material Name', 'Unit', 'Qty', 'Rate (Rs.)', 'Amount (Rs.)']]
+    total = Decimal('0.00')
+    for row in checked_rows:
+        amount = Decimal(row['amount']) if row['amount'] else Decimal('0.00')
+        total += amount
+        table_data.append([
+            row['material_name'] or '-',
+            row['unit'] or '-',
+            str(row['requested_qty']) if row['requested_qty'] is not None else '-',
+            row['unit_rate'] or '-',
+            row['amount'] or '-',
+        ])
+    table_data.append(['', '', '', 'Total', f'{total:.2f}'])
+
+    table = Table(table_data, colWidths=[70 * mm, 25 * mm, 20 * mm, 30 * mm, 30 * mm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e293b')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -2), 0.5, colors.HexColor('#cbd5e1')),
+        ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('LINEABOVE', (0, -1), (-1, -1), 1, colors.black),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(table)
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=20 * mm, bottomMargin=20 * mm)
+    doc.build(elements)
+    buffer.seek(0)
+
+    response = HttpResponse(buffer.read(), content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{quotation.quotation_number}.pdf"'
+    return response

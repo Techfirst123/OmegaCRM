@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Loader2, AlertCircle, FileText } from 'lucide-react'
+import { Plus, Loader2, AlertCircle, FileText, Download } from 'lucide-react'
 
 const LIST_URL = '/procurement/api/quotations/'
+const pdfUrl = (id) => `/procurement/api/quotations/${id}/pdf/`
 
 const STATUS_LABELS = {
   draft: { label: 'Draft', className: 'bg-slate-100 text-slate-600' },
@@ -53,16 +54,16 @@ export default function QuotationList() {
             <thead>
               <tr>
                 <th>Quotation No.</th><th>Status</th><th className="text-right">Items</th>
-                <th>Created</th><th>Purchase Order</th>
+                <th>Created</th><th>Purchase Order</th><th></th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} className="text-center py-10 text-slate-400">
+                <tr><td colSpan={6} className="text-center py-10 text-slate-400">
                   <Loader2 size={18} className="animate-spin inline-block mr-2" />Loading quotations…
                 </td></tr>
               ) : quotations.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-10 text-slate-400">
+                <tr><td colSpan={6} className="text-center py-10 text-slate-400">
                   No quotations yet. Create one to get started.
                 </td></tr>
               ) : quotations.map((q) => {
@@ -78,6 +79,12 @@ export default function QuotationList() {
                     <td className="text-right">{q.item_count}</td>
                     <td className="text-xs text-slate-500">{new Date(q.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                     <td className="text-xs text-slate-500">{q.po_number || '-'}</td>
+                    <td>
+                      <a href={pdfUrl(q.id)} target="_blank" rel="noreferrer" title="Download PDF"
+                        className="text-slate-400 hover:text-brand-600" onClick={(e) => e.stopPropagation()}>
+                        <Download size={15} />
+                      </a>
+                    </td>
                   </tr>
                 )
               })}

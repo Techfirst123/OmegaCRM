@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  Pencil, Plus, Trash2, Loader2, AlertCircle, CheckCircle2, ShieldCheck, Save, X, ArrowLeft,
+  Pencil, Plus, Trash2, Loader2, AlertCircle, CheckCircle2, ShieldCheck, Save, X, ArrowLeft, Download,
 } from 'lucide-react'
 
 function getCookie(name) {
@@ -15,6 +15,7 @@ const detailUrl = (id) => `/procurement/api/quotations/${id}/`
 const updateUrl = (id) => `/procurement/api/quotations/${id}/update/`
 const verifyUrl = (id) => `/procurement/api/quotations/${id}/verify/`
 const generateUrl = (id) => `/procurement/api/quotations/${id}/generate-po/`
+const pdfUrl = (id) => `/procurement/api/quotations/${id}/pdf/`
 const VENDOR_OPTIONS_URL = '/procurement/api/vendors/'
 
 const STATUS_LABELS = {
@@ -228,6 +229,9 @@ export default function QuotationDetail() {
           <h3 className="text-lg font-bold text-slate-900">Purchase Order {success.po_number} generated</h3>
           <p className="text-sm text-slate-500">This quotation is now locked and linked to the purchase order.</p>
           <div className="flex gap-2 mt-2">
+            <a className="btn-secondary" href={pdfUrl(id)} target="_blank" rel="noreferrer">
+              <Download size={14} />Download PDF
+            </a>
             <button className="btn-primary" onClick={() => navigate('/materials/quotations')}>Back to Quotations</button>
           </div>
         </div>
@@ -251,13 +255,20 @@ export default function QuotationDetail() {
             {quotation.verified_at && ` · Verified ${new Date(quotation.verified_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`}
           </p>
         </div>
-        {!quotation.is_locked && !editing && (
+        {!editing && (
           <div className="flex items-center gap-2">
-            <button className="btn-secondary" onClick={startEditing}><Pencil size={14} />Edit</button>
-            <button className="btn-primary" disabled={verifying} onClick={handleVerify}>
-              {verifying ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-              Verify
-            </button>
+            <a className="btn-secondary" href={pdfUrl(id)} target="_blank" rel="noreferrer">
+              <Download size={14} />Download PDF
+            </a>
+            {!quotation.is_locked && (
+              <>
+                <button className="btn-secondary" onClick={startEditing}><Pencil size={14} />Edit</button>
+                <button className="btn-primary" disabled={verifying} onClick={handleVerify}>
+                  {verifying ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                  Verify
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
