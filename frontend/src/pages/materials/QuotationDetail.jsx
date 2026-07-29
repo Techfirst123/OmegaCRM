@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   Pencil, Plus, Trash2, Loader2, AlertCircle, CheckCircle2, ShieldCheck, Save, X, ArrowLeft, Download,
+  Eye, Send, UserSquare2,
 } from 'lucide-react'
 
 function getCookie(name) {
@@ -17,6 +18,7 @@ const verifyUrl = (id) => `/procurement/api/quotations/${id}/verify/`
 const generateUrl = (id) => `/procurement/api/quotations/${id}/generate-po/`
 const pdfUrl = (id) => `/procurement/api/quotations/${id}/pdf/`
 const VENDOR_OPTIONS_URL = '/procurement/api/vendors/'
+const MATERIAL_OPTIONS_URL = '/materials/master/options/'
 
 const STATUS_LABELS = {
   draft: { label: 'Draft', className: 'bg-slate-100 text-slate-600' },
@@ -75,9 +77,11 @@ export default function QuotationDetail() {
 
   const [editing, setEditing] = useState(false)
   const [editRows, setEditRows] = useState([])
+  const [editParty, setEditParty] = useState(null)
   const [savingEdit, setSavingEdit] = useState(false)
   const [verifying, setVerifying] = useState(false)
 
+  const [materialOptions, setMaterialOptions] = useState([])
   const [vendors, setVendors] = useState([])
   const [vendorsLoading, setVendorsLoading] = useState(true)
   const [poForm, setPoForm] = useState({
@@ -113,6 +117,13 @@ export default function QuotationDetail() {
       .finally(() => setVendorsLoading(false))
   }, [])
 
+  useEffect(() => {
+    fetch(MATERIAL_OPTIONS_URL, { credentials: 'same-origin' })
+      .then((res) => res.json())
+      .then((data) => setMaterialOptions(data.results || []))
+      .catch(() => setMaterialOptions([]))
+  }, [])
+
   const quotationTotal = useMemo(() => {
     if (!quotation) return 0
     return quotation.rows.reduce((sum, row) => sum + (row.amount ? parseFloat(row.amount) : 0), 0)
@@ -120,12 +131,27 @@ export default function QuotationDetail() {
 
   const startEditing = () => {
     setEditRows(quotation.rows.map((r) => ({ material_name: r.material_name, unit: r.unit, quantity: r.requested_qty ?? '' })))
+    setEditParty({
+      client_name: quotation.client_name, client_address: quotation.client_address, client_mobile: quotation.client_mobile,
+      sender_name: quotation.sender_name, sender_address: quotation.sender_address, sender_mobile: quotation.sender_mobile,
+    })
     setEditing(true)
     setAlert(null)
   }
   const cancelEditing = () => setEditing(false)
+  const setEditPartyField = (key) => (e) => setEditParty((p) => ({ ...p, [key]: e.target.value }))
   const updateEditRow = (index, key, value) => {
     setEditRows((rows) => rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)))
+  }
+  const handleEditMaterialNameChange = (index, value) => {
+    setEditRows((rows) => rows.map((row, i) => {
+      if (i !== index) return row
+      if (!row.unit) {
+        const match = materialOptions.find((o) => o.material_name.toLowerCase() === value.toLowerCase())
+        if (match) return { ...row, material_name: value, unit: match.unit }
+      }
+      return { ...row, material_name: value }
+    }))
   }
   const addEditRow = () => setEditRows((rows) => [...rows, { material_name: '', unit: '', quantity: '' }])
   const removeEditRow = (index) => setEditRows((rows) => rows.filter((_, i) => i !== index))
@@ -142,7 +168,7 @@ export default function QuotationDetail() {
       const res = await fetch(updateUrl(id), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, ...editParty }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Could not update the quotation.')
@@ -257,6 +283,9 @@ export default function QuotationDetail() {
         </div>
         {!editing && (
           <div className="flex items-center gap-2">
+            <Link className="btn-secondary" to={`/materials/quotations/${id}/preview`}>
+              <Eye size={14} />Preview
+            </Link>
             <a className="btn-secondary" href={pdfUrl(id)} target="_blank" rel="noreferrer">
               <Download size={14} />Download PDF
             </a>
@@ -291,36 +320,82 @@ export default function QuotationDetail() {
         </div>
       )}
 
-      {editing ? (
-        <div className="card p-4 space-y-3">
-          <h3 className="font-semibold text-slate-800 text-sm">Edit Products</h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-            {editRows.map((row, i) => (
-              <div key={i} className="grid grid-cols-[1fr_90px_80px_28px] gap-1.5">
-                <Input placeholder="Material name" value={row.material_name}
-                  onChange={(e) => updateEditRow(i, 'material_name', e.target.value)} />
-                <Input placeholder="Unit" value={row.unit}
-                  onChange={(e) => updateEditRow(i, 'unit', e.target.value)} />
-                <Input type="number" min="1" step="1" placeholder="Qty" value={row.quantity}
-                  onChange={(e) => updateEditRow(i, 'quantity', e.target.value)} />
-                <button type="button" className="text-slate-400 hover:text-red-500" onClick={() => removeEditRow(i)}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
+      {!editing && (quotation.client_name || quotation.client_address || quotation.client_mobile
+        || quotation.sender_name || quotation.sender_address || quotation.sender_mobile) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="card p-4 space-y-1">
+            <div className="flex items-center gap-2 font-semibold text-slate-800 text-sm mb-1">
+              <Send size={15} className="text-brand-500" /> From
+            </div>
+            <p className="text-sm text-slate-700">{quotation.sender_name || '-'}</p>
+            {quotation.sender_address && <p className="text-xs text-slate-500">{quotation.sender_address}</p>}
+            {quotation.sender_mobile && <p className="text-xs text-slate-500">Mobile: {quotation.sender_mobile}</p>}
           </div>
-          <div className="flex gap-2">
-            <button type="button" className="btn-secondary text-xs" onClick={addEditRow}><Plus size={13} />Add Row</button>
-            <div className="ml-auto flex gap-2">
-              <button type="button" className="btn-secondary text-xs" onClick={cancelEditing}><X size={13} />Cancel</button>
-              <button type="button" className="btn-primary text-xs" disabled={savingEdit} onClick={saveEdits}>
-                {savingEdit ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                Save Changes
-              </button>
+          <div className="card p-4 space-y-1">
+            <div className="flex items-center gap-2 font-semibold text-slate-800 text-sm mb-1">
+              <UserSquare2 size={15} className="text-brand-500" /> To
+            </div>
+            <p className="text-sm text-slate-700">{quotation.client_name || '-'}</p>
+            {quotation.client_address && <p className="text-xs text-slate-500">{quotation.client_address}</p>}
+            {quotation.client_mobile && <p className="text-xs text-slate-500">Mobile: {quotation.client_mobile}</p>}
+          </div>
+        </div>
+      )}
+
+      {editing ? (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="card p-4 space-y-3">
+              <div className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
+                <Send size={15} className="text-brand-500" /> From
+              </div>
+              <Field label="Name / Company"><Input value={editParty.sender_name} onChange={setEditPartyField('sender_name')} placeholder="e.g. OmegaERP Sales" /></Field>
+              <Field label="Address"><Input value={editParty.sender_address} onChange={setEditPartyField('sender_address')} placeholder="Office / site address" /></Field>
+              <Field label="Mobile Number"><Input value={editParty.sender_mobile} onChange={setEditPartyField('sender_mobile')} placeholder="e.g. 9876543210" /></Field>
+            </div>
+            <div className="card p-4 space-y-3">
+              <div className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
+                <UserSquare2 size={15} className="text-brand-500" /> To
+              </div>
+              <Field label="Client Name"><Input value={editParty.client_name} onChange={setEditPartyField('client_name')} placeholder="e.g. Acme Solar Pvt Ltd" /></Field>
+              <Field label="Address"><Input value={editParty.client_address} onChange={setEditPartyField('client_address')} placeholder="Client address" /></Field>
+              <Field label="Mobile Number"><Input value={editParty.client_mobile} onChange={setEditPartyField('client_mobile')} placeholder="e.g. 9876543210" /></Field>
             </div>
           </div>
-          <p className="text-xs text-slate-400">Saving changes will reset a Verified quotation back to Draft, since the list has changed.</p>
-        </div>
+
+          <div className="card p-4 space-y-3">
+            <h3 className="font-semibold text-slate-800 text-sm">Edit Products</h3>
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {editRows.map((row, i) => (
+                <div key={i} className="grid grid-cols-[1fr_90px_80px_28px] gap-1.5">
+                  <Input list="material-options-datalist" placeholder="Material name" value={row.material_name}
+                    onChange={(e) => handleEditMaterialNameChange(i, e.target.value)} />
+                  <Input placeholder="Unit" value={row.unit}
+                    onChange={(e) => updateEditRow(i, 'unit', e.target.value)} />
+                  <Input type="number" min="1" step="1" placeholder="Qty" value={row.quantity}
+                    onChange={(e) => updateEditRow(i, 'quantity', e.target.value)} />
+                  <button type="button" className="text-slate-400 hover:text-red-500" onClick={() => removeEditRow(i)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <datalist id="material-options-datalist">
+              {materialOptions.map((opt, idx) => <option key={idx} value={opt.material_name} />)}
+            </datalist>
+            <div className="flex gap-2">
+              <button type="button" className="btn-secondary text-xs" onClick={addEditRow}><Plus size={13} />Add Row</button>
+              <div className="ml-auto flex gap-2">
+                <button type="button" className="btn-secondary text-xs" onClick={cancelEditing}><X size={13} />Cancel</button>
+                <button type="button" className="btn-primary text-xs" disabled={savingEdit} onClick={saveEdits}>
+                  {savingEdit ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                  Save Changes
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400">Saving changes will reset a Verified quotation back to Draft, since the list has changed.</p>
+          </div>
+        </>
       ) : (
         <div className="card overflow-hidden">
           <div className="p-4 border-b border-surface-100 flex items-center justify-between">

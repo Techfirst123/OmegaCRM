@@ -20,6 +20,7 @@ urlpatterns = [
     path('materials/master/clear/', views.clear_material_import, name='material-master-clear'),
     path('materials/master/work-package/', views.update_material_work_package, name='material-master-work-package'),
     path('materials/master/list/', views.material_list_api, name='material-master-list-api'),
+    path('materials/master/options/', views.material_options_api, name='material-master-options-api'),
     path('materials/master/create/', views.material_create_api, name='material-master-create-api'),
     path('materials/quotation/', views.material_quotation, name='material-quotation'),
     path('vendors/register/', views.register_vendor, name='vendor-register'),

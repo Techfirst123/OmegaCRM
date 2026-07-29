@@ -15,6 +15,9 @@ from .models import Quotation, QuotationItem
 from .views import _log_activity, _log_system_po_event
 
 
+PARTY_FIELDS = ('client_name', 'client_address', 'client_mobile', 'sender_name', 'sender_address', 'sender_mobile')
+
+
 def _extract_items_payload(payload):
     normalized = []
     for row in payload.get('items') or []:
@@ -32,6 +35,10 @@ def _extract_items_payload(payload):
     return normalized
 
 
+def _extract_party_fields(payload):
+    return {field: str(payload.get(field) or '').strip() for field in PARTY_FIELDS}
+
+
 def _quotation_raw_rows(quotation):
     return [
         {'material_name': item.material_name, 'unit': item.unit, 'quantity': item.quantity}
@@ -40,7 +47,7 @@ def _quotation_raw_rows(quotation):
 
 
 def _serialize_quotation_summary(quotation):
-    return {
+    data = {
         'id': quotation.pk,
         'quotation_number': quotation.quotation_number,
         'status': quotation.status,
@@ -52,6 +59,9 @@ def _serialize_quotation_summary(quotation):
         'po_id': quotation.purchase_order_id,
         'po_number': quotation.purchase_order.po_number if quotation.purchase_order_id else None,
     }
+    for field in PARTY_FIELDS:
+        data[field] = getattr(quotation, field)
+    return data
 
 
 def _serialize_quotation_detail(quotation):
@@ -86,6 +96,7 @@ def quotation_create_api(request):
     with transaction.atomic():
         quotation = Quotation.objects.create(
             created_by=request.user if request.user.is_authenticated else None,
+            **_extract_party_fields(payload),
         )
         QuotationItem.objects.bulk_create([
             QuotationItem(quotation=quotation, **item) for item in items
@@ -129,10 +140,12 @@ def quotation_update_api(request, pk):
         QuotationItem.objects.bulk_create([
             QuotationItem(quotation=quotation, **item) for item in items
         ])
+        for field, value in _extract_party_fields(payload).items():
+            setattr(quotation, field, value)
         if quotation.status == Quotation.STATUS_VERIFIED:
             quotation.status = Quotation.STATUS_DRAFT
             quotation.verified_at = None
-        quotation.save(update_fields=['status', 'verified_at', 'updated_at'])
+        quotation.save(update_fields=['status', 'verified_at', 'updated_at', *PARTY_FIELDS])
 
     return JsonResponse({
         'message': f'Quotation {quotation.quotation_number} updated.',
@@ -248,20 +261,45 @@ def quotation_pdf_api(request, pk):
 
     checked_rows, _all_matched = check_bulk_rows(_quotation_raw_rows(quotation))
     styles = getSampleStyleSheet()
+    label_style = styles['Normal'].clone('label')
+    label_style.fontName = 'Helvetica-Bold'
 
     elements = [
         Paragraph('OmegaERP', styles['Title']),
         Paragraph('Material Quotation', styles['Heading2']),
-        Spacer(1, 6 * mm),
+        Spacer(1, 4 * mm),
         Paragraph(f'Quotation No.: {quotation.quotation_number}', styles['Normal']),
         Paragraph(f"Date: {quotation.created_at.strftime('%d %b %Y')}", styles['Normal']),
         Paragraph(f'Status: {quotation.get_status_display()}', styles['Normal']),
     ]
     if quotation.purchase_order_id:
         elements.append(Paragraph(f'Purchase Order: {quotation.purchase_order.po_number}', styles['Normal']))
+    elements.append(Spacer(1, 6 * mm))
+
+    def _party_block(title, name, address, mobile):
+        block = [Paragraph(title, label_style)]
+        block.append(Paragraph(name or '-', styles['Normal']))
+        if address:
+            block.append(Paragraph(address.replace('\n', '<br/>'), styles['Normal']))
+        if mobile:
+            block.append(Paragraph(f'Mobile: {mobile}', styles['Normal']))
+        return block
+
+    party_table = Table(
+        [[
+            _party_block('From', quotation.sender_name, quotation.sender_address, quotation.sender_mobile),
+            _party_block('To', quotation.client_name, quotation.client_address, quotation.client_mobile),
+        ]],
+        colWidths=[85 * mm, 85 * mm],
+    )
+    party_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    elements.append(party_table)
     elements.append(Spacer(1, 8 * mm))
 
-    table_data = [['Material Name', 'Unit', 'Qty', 'Rate (Rs.)', 'Amount (Rs.)']]
+    table_data = [['Material Name', 'Unit', 'Qty', 'Available', 'Rate (Rs.)', 'Amount (Rs.)']]
     total = Decimal('0.00')
     for row in checked_rows:
         amount = Decimal(row['amount']) if row['amount'] else Decimal('0.00')
@@ -270,12 +308,13 @@ def quotation_pdf_api(request, pk):
             row['material_name'] or '-',
             row['unit'] or '-',
             str(row['requested_qty']) if row['requested_qty'] is not None else '-',
+            str(row['available_qty']) if row['available_qty'] is not None else '-',
             row['unit_rate'] or '-',
             row['amount'] or '-',
         ])
-    table_data.append(['', '', '', 'Total', f'{total:.2f}'])
+    table_data.append(['', '', '', '', 'Total', f'{total:.2f}'])
 
-    table = Table(table_data, colWidths=[70 * mm, 25 * mm, 20 * mm, 30 * mm, 30 * mm])
+    table = Table(table_data, colWidths=[55 * mm, 22 * mm, 18 * mm, 22 * mm, 28 * mm, 28 * mm])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e293b')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),

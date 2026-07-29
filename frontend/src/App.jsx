@@ -20,6 +20,7 @@ import MaterialList  from './pages/materials/MaterialList'
 import QuotationList   from './pages/materials/QuotationList'
 import QuotationBuilder from './pages/materials/QuotationBuilder'
 import QuotationDetail  from './pages/materials/QuotationDetail'
+import QuotationPreview from './pages/materials/QuotationPreview'
 import TransportList from './pages/transport/TransportList'
 import TaskList      from './pages/tasks/TaskList'
 import ReportsList   from './pages/reports/ReportsList'
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="materials/quotations"     element={<QuotationList />}    />
             <Route path="materials/quotations/new" element={<QuotationBuilder />} />
             <Route path="materials/quotations/:id" element={<QuotationDetail />}  />
+            <Route path="materials/quotations/:id/preview" element={<QuotationPreview />} />
             <Route path="transport"              element={<TransportList />} />
             <Route path="tasks"                  element={<TaskList />}      />
 

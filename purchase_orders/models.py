@@ -318,6 +318,15 @@ class Quotation(models.Model):
 
     quotation_number = models.CharField(max_length=50, unique=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+
+    client_name = models.CharField(max_length=255, blank=True)
+    client_address = models.TextField(blank=True)
+    client_mobile = models.CharField(max_length=20, blank=True)
+
+    sender_name = models.CharField(max_length=255, blank=True)
+    sender_address = models.TextField(blank=True)
+    sender_mobile = models.CharField(max_length=20, blank=True)
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

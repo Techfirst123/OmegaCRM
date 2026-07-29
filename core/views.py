@@ -916,6 +916,22 @@ def material_list_api(request):
 
 
 @login_required(login_url='/admin/login/')
+def material_options_api(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET required'}, status=405)
+    rows = (
+        MaterialMaster.objects
+        .exclude(material_name='')
+        .exclude(qty_specification='')
+        .values('material_name', 'qty_specification')
+        .distinct()
+        .order_by('material_name')
+    )
+    options = [{'material_name': row['material_name'], 'unit': row['qty_specification']} for row in rows]
+    return JsonResponse({'results': options})
+
+
+@login_required(login_url='/admin/login/')
 def material_create_api(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)

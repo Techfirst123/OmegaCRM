@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Upload, Plus, Trash2, Loader2, AlertCircle, CheckCircle2, PackageSearch, ShieldCheck, Save,
+  Upload, Plus, Trash2, Loader2, AlertCircle, CheckCircle2, PackageSearch, ShieldCheck, Save, Send, UserSquare2,
 } from 'lucide-react'
 
 function getCookie(name) {
@@ -13,8 +13,20 @@ function getCookie(name) {
 
 const CHECK_URL = '/procurement/purchase-orders/bulk-generate/check/'
 const CREATE_URL = '/procurement/api/quotations/create/'
+const MATERIAL_OPTIONS_URL = '/materials/master/options/'
 
 const emptyRow = () => ({ material_name: '', unit: '', quantity: '' })
+const emptyParty = () => ({
+  client_name: '', client_address: '', client_mobile: '',
+  sender_name: '', sender_address: '', sender_mobile: '',
+})
+
+const Field = ({ label, children }) => (
+  <div>
+    <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+    {children}
+  </div>
+)
 
 const Input = (props) => (
   <input
@@ -28,13 +40,35 @@ export default function QuotationBuilder() {
   const fileInputRef = useRef(null)
 
   const [manualRows, setManualRows] = useState([emptyRow(), emptyRow(), emptyRow()])
+  const [materialOptions, setMaterialOptions] = useState([])
   const [verifying, setVerifying] = useState(false)
   const [preview, setPreview] = useState(null) // { rows, all_matched }
   const [alert, setAlert] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [party, setParty] = useState(emptyParty())
+
+  useEffect(() => {
+    fetch(MATERIAL_OPTIONS_URL, { credentials: 'same-origin' })
+      .then((res) => res.json())
+      .then((data) => setMaterialOptions(data.results || []))
+      .catch(() => setMaterialOptions([]))
+  }, [])
+
+  const setPartyField = (key) => (e) => setParty((p) => ({ ...p, [key]: e.target.value }))
 
   const updateManualRow = (index, key, value) => {
     setManualRows((rows) => rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)))
+    setPreview(null)
+  }
+  const handleMaterialNameChange = (index, value) => {
+    setManualRows((rows) => rows.map((row, i) => {
+      if (i !== index) return row
+      if (!row.unit) {
+        const match = materialOptions.find((o) => o.material_name.toLowerCase() === value.toLowerCase())
+        if (match) return { ...row, material_name: value, unit: match.unit }
+      }
+      return { ...row, material_name: value }
+    }))
     setPreview(null)
   }
   const addManualRow = () => setManualRows((rows) => [...rows, emptyRow()])
@@ -123,7 +157,7 @@ export default function QuotationBuilder() {
       const res = await fetch(CREATE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, ...party }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Could not save the quotation.')
@@ -159,6 +193,28 @@ export default function QuotationBuilder() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card p-4 space-y-3">
           <div className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
+            <Send size={15} className="text-brand-500" /> From
+          </div>
+          <p className="text-xs text-slate-500">Who is sending this quotation.</p>
+          <Field label="Name / Company"><Input value={party.sender_name} onChange={setPartyField('sender_name')} placeholder="e.g. OmegaERP Sales" /></Field>
+          <Field label="Address"><Input value={party.sender_address} onChange={setPartyField('sender_address')} placeholder="Office / site address" /></Field>
+          <Field label="Mobile Number"><Input value={party.sender_mobile} onChange={setPartyField('sender_mobile')} placeholder="e.g. 9876543210" /></Field>
+        </div>
+
+        <div className="card p-4 space-y-3">
+          <div className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
+            <UserSquare2 size={15} className="text-brand-500" /> To
+          </div>
+          <p className="text-xs text-slate-500">Who this quotation is being sent to.</p>
+          <Field label="Client Name"><Input value={party.client_name} onChange={setPartyField('client_name')} placeholder="e.g. Acme Solar Pvt Ltd" /></Field>
+          <Field label="Address"><Input value={party.client_address} onChange={setPartyField('client_address')} placeholder="Client address" /></Field>
+          <Field label="Mobile Number"><Input value={party.client_mobile} onChange={setPartyField('client_mobile')} placeholder="e.g. 9876543210" /></Field>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="card p-4 space-y-3">
+          <div className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
             <Upload size={15} className="text-brand-500" /> Upload Product List
           </div>
           <p className="text-xs text-slate-500">
@@ -177,11 +233,12 @@ export default function QuotationBuilder() {
           <div className="flex items-center gap-2 font-semibold text-slate-800 text-sm">
             <PackageSearch size={15} className="text-brand-500" /> Products
           </div>
+          <p className="text-xs text-slate-500">Material names are suggested from what's already in the Material Master — pick one to auto-fill the unit.</p>
           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
             {manualRows.map((row, i) => (
               <div key={i} className="grid grid-cols-[1fr_90px_80px_28px] gap-1.5">
-                <Input placeholder="Material name" value={row.material_name}
-                  onChange={(e) => updateManualRow(i, 'material_name', e.target.value)} />
+                <Input list="material-options-datalist" placeholder="Material name" value={row.material_name}
+                  onChange={(e) => handleMaterialNameChange(i, e.target.value)} />
                 <Input placeholder="Unit" value={row.unit}
                   onChange={(e) => updateManualRow(i, 'unit', e.target.value)} />
                 <Input type="number" min="1" step="1" placeholder="Qty" value={row.quantity}
@@ -192,6 +249,11 @@ export default function QuotationBuilder() {
               </div>
             ))}
           </div>
+          <datalist id="material-options-datalist">
+            {materialOptions.map((opt, idx) => (
+              <option key={idx} value={opt.material_name} />
+            ))}
+          </datalist>
           <div className="flex gap-2">
             <button type="button" className="btn-secondary text-xs" onClick={addManualRow}><Plus size={13} />Add Row</button>
             <button type="button" className="btn-secondary text-xs ml-auto" disabled={verifying} onClick={handleVerifyManual}>
